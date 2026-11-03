@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, Calculator, Sparkles, RefreshCw } from "lucide-react";
+import { X, Calculator, Sparkles, RefreshCw, ShieldCheck } from "lucide-react";
 import type { ComputedTrade } from "@/lib/sepa-math";
 import type {
   NewTradeInput,
@@ -33,10 +33,22 @@ interface TradeModalProps {
   onSubmit: (data: NewTradeInput, tradeId?: number) => Promise<void>;
   initialTrade?: ComputedTrade | null;
   preselectedSecurity?: SecurityRecord | null;
+  initialSizing?: {
+    securityId?: number;
+    shares?: number;
+    buyPrice?: number;
+    initialStopLoss?: number;
+    fxRateToEur?: number;
+  } | null;
   securities: SecurityRecord[];
   forexPairs: ForexPairRecord[];
   mode?: "create" | "edit" | "close";
   onNavigateToSecurities?: () => void;
+  onOpenPositionSizer?: (params?: {
+    securityId?: number;
+    buyPrice?: number;
+    initialStopLoss?: number;
+  }) => void;
 }
 
 export function TradeModal({
@@ -45,10 +57,12 @@ export function TradeModal({
   onSubmit,
   initialTrade,
   preselectedSecurity,
+  initialSizing,
   securities,
   forexPairs,
   mode = "create",
   onNavigateToSecurities,
+  onOpenPositionSizer,
 }: TradeModalProps) {
   const [selectedSecurityId, setSelectedSecurityId] = useState<string>("");
   const [ticker, setTicker] = useState("");
@@ -113,6 +127,31 @@ export function TradeModal({
       setStopMoved(initialTrade.stopMoved);
       setTrimmedAt2R(initialTrade.trimmedAt2R);
       setNotes(initialTrade.notes || "");
+    } else if (initialSizing) {
+      const sec = initialSizing.securityId
+        ? securities.find((s) => s.id === initialSizing.securityId)
+        : null;
+      if (sec) {
+        setSelectedSecurityId(String(sec.id));
+        setTicker(sec.ticker);
+        setGicsSector(sec.gicsSector);
+        setCurrency(sec.currency);
+        setFxRateToEur(String(getFxRateForCurrency(sec.currency)));
+      }
+      setStartDate(new Date().toISOString().slice(0, 10));
+      setEndDate("");
+      setShares(initialSizing.shares ? String(initialSizing.shares) : "");
+      setBuyPrice(initialSizing.buyPrice ? String(initialSizing.buyPrice) : "");
+      setSellPrice("");
+      setInitialStopLoss(
+        initialSizing.initialStopLoss ? String(initialSizing.initialStopLoss) : ""
+      );
+      setManualLatestPrice(
+        initialSizing.buyPrice ? String(initialSizing.buyPrice) : ""
+      );
+      setStopMoved(false);
+      setTrimmedAt2R(false);
+      setNotes("");
     } else if (preselectedSecurity) {
       setSelectedSecurityId(String(preselectedSecurity.id));
       setTicker(preselectedSecurity.ticker);
@@ -174,7 +213,7 @@ export function TradeModal({
       setNotes("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, initialTrade, preselectedSecurity, mode]);
+  }, [isOpen, initialTrade, preselectedSecurity, initialSizing, mode]);
 
   if (!isOpen) return null;
 
@@ -443,9 +482,32 @@ export function TradeModal({
           {/* Row 2: Shares, Buy Price, Initial Stop Loss */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                Shares (Quantity) *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-600">
+                  Shares (Quantity) *
+                </label>
+                {onOpenPositionSizer && mode !== "close" && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onOpenPositionSizer({
+                        securityId: selectedSecurityId
+                          ? Number(selectedSecurityId)
+                          : undefined,
+                        buyPrice: buyPrice ? Number(buyPrice) : undefined,
+                        initialStopLoss: initialStopLoss
+                          ? Number(initialStopLoss)
+                          : undefined,
+                      })
+                    }
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                    title="Open Risk-First Position Sizing Calculator"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Risk Sizer</span>
+                  </button>
+                )}
+              </div>
               <input
                 type="number"
                 step="any"

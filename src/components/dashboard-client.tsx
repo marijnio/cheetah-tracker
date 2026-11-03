@@ -13,10 +13,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  ShieldCheck,
 } from "lucide-react";
 import { KpiCards } from "./kpi-cards";
 import { TradeTable } from "./trade-table";
 import { TradeModal } from "./trade-modal";
+import { PositionSizerModal } from "./position-sizer-modal";
 import { SecuritiesView } from "./securities-view";
 import { ForexView } from "./forex-view";
 import {
@@ -68,6 +70,17 @@ export function DashboardClient({
   const [editingTrade, setEditingTrade] = useState<ComputedTrade | null>(null);
   const [preselectedSecurity, setPreselectedSecurity] =
     useState<SecurityRecord | null>(null);
+  const [initialSizing, setInitialSizing] = useState<{
+    securityId?: number;
+    shares?: number;
+    buyPrice?: number;
+    initialStopLoss?: number;
+    fxRateToEur?: number;
+  } | null>(null);
+  const [isPositionSizerOpen, setIsPositionSizerOpen] = useState(false);
+  const [sizerParams, setSizerParams] = useState<
+    { securityId?: number; buyPrice?: number; initialStopLoss?: number } | undefined
+  >(undefined);
   const [modalMode, setModalMode] = useState<"create" | "edit" | "close">(
     "create"
   );
@@ -132,6 +145,7 @@ export function DashboardClient({
   const handleOpenCreate = () => {
     setEditingTrade(null);
     setPreselectedSecurity(null);
+    setInitialSizing(null);
     setModalMode("create");
     setIsModalOpen(true);
   };
@@ -139,6 +153,7 @@ export function DashboardClient({
   const handleNewTradeForSecurity = (sec: SecurityRecord) => {
     setEditingTrade(null);
     setPreselectedSecurity(sec);
+    setInitialSizing(null);
     setModalMode("create");
     setIsModalOpen(true);
   };
@@ -149,7 +164,35 @@ export function DashboardClient({
   ) => {
     setEditingTrade(trade);
     setPreselectedSecurity(null);
+    setInitialSizing(null);
     setModalMode(mode);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenPositionSizer = (params?: {
+    securityId?: number;
+    buyPrice?: number;
+    initialStopLoss?: number;
+  }) => {
+    setSizerParams(params);
+    setIsPositionSizerOpen(true);
+  };
+
+  const handleApplySizingToTrade = (sizing: {
+    securityId?: number;
+    ticker: string;
+    currency: string;
+    gicsSector?: string;
+    shares: number;
+    buyPrice: number;
+    initialStopLoss: number;
+    fxRateToEur: number;
+  }) => {
+    setIsPositionSizerOpen(false);
+    setInitialSizing(sizing);
+    setEditingTrade(null);
+    setPreselectedSecurity(null);
+    setModalMode("create");
     setIsModalOpen(true);
   };
 
@@ -614,6 +657,16 @@ export function DashboardClient({
               <div className="flex items-center gap-2.5">
                 <button
                   type="button"
+                  onClick={() => handleOpenPositionSizer()}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+                  title="Risk-First Position Sizing Calculator"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Position Sizer</span>
+                </button>
+
+                <button
+                  type="button"
                   disabled={isSyncingAll}
                   onClick={() => handleBatchSync("OPEN_ONLY")}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
@@ -737,14 +790,30 @@ export function DashboardClient({
 
       <TradeModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setInitialSizing(null);
+        }}
         onSubmit={handleSaveTrade}
         initialTrade={editingTrade}
         preselectedSecurity={preselectedSecurity}
+        initialSizing={initialSizing}
         securities={securities}
         forexPairs={forexPairs}
         mode={modalMode}
         onNavigateToSecurities={() => setActiveSection("SECURITIES")}
+        onOpenPositionSizer={handleOpenPositionSizer}
+      />
+
+      <PositionSizerModal
+        isOpen={isPositionSizerOpen}
+        onClose={() => setIsPositionSizerOpen(false)}
+        securities={securities}
+        forexPairs={forexPairs}
+        onApplyToTrade={handleApplySizingToTrade}
+        initialSecurityId={sizerParams?.securityId}
+        initialBuyPrice={sizerParams?.buyPrice}
+        initialStopLoss={sizerParams?.initialStopLoss}
       />
     </div>
   );
