@@ -3,18 +3,15 @@ version: "3.8"
 services:
   cheetah-tracker:
     container_name: cheetah-tracker
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: cheetah-tracker:latest
+    # Pre-built image hosted on GitHub Container Registry (zero CPU compile on NAS!)
+    image: ghcr.io/marijnio/cheetah-tracker:latest
     restart: unless-stopped
     ports:
-      # Exposes on port 3000 (or change 3000:3000 to 3080:3000 if 3000 is occupied on your NAS)
+      # Maps port 3000 on your NAS (change left side to 3080:3000 if 3000 is occupied)
       - "3000:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
     volumes:
-      # Persists SQLite database and cache on your Synology NAS filesystem
-      # On Synology Container Manager, this maps to your chosen shared folder (e.g., /volume1/docker/cheetah-tracker/data)
+      # Persists SQLite database and cache on your Synology disk
       - ./data:/app/data
