@@ -1,15 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
-  Activity,
-  Briefcase,
-  Target,
-  TrendingUp,
-  Scale,
-  Euro,
-  DollarSign,
-  Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import type { PortfolioKPIs } from "@/lib/sepa-math";
 
@@ -43,237 +37,192 @@ function formatPct(val: number, decimals = 1, showPlus = false): string {
 }
 
 export function KpiCards({ kpis, filterLabel }: KpiCardsProps) {
+  const [showDetails, setShowDetails] = useState(false);
   const expectancyPct = kpis.mathExpectancy * 100;
 
   return (
-    <section aria-label="Portfolio Performance KPIs" className="space-y-3">
+    <section aria-label="Portfolio Performance KPIs" className="space-y-2">
       {filterLabel && (
-        <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200/80 rounded-lg px-3 py-1.5 w-fit">
+        <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200/80 rounded-lg px-2.5 py-1 w-fit">
           <span>KPIs filtered by:</span>
           <strong className="font-semibold">{filterLabel}</strong>
         </div>
       )}
 
-      {/* Row 1: Primary SEPA Performance Strip (Unified Card like Portfolio Dividend Tracker) */}
-      <div className="bg-white border border-slate-200/80 rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.03)] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
-        {/* Win Rate */}
-        <div className="p-5 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Win Rate
+      {/* Slim Unified KPI Header Card */}
+      <div className="bg-white border border-slate-200/80 rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.03)] overflow-hidden">
+        {/* Primary Row: Essential 4 metrics in a compact, single-line format */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
+          {/* 1. Win Rate */}
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Win Rate
+              </div>
+              <div className="flex items-baseline gap-2 mt-0.5 tabular-nums">
+                <span className="text-lg font-bold text-slate-900">
+                  {formatPct(kpis.winRate, 1)}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  <span className="text-emerald-600 font-semibold">{kpis.winningTrades}W</span>
+                  {" "}/{" "}
+                  <span className="text-rose-500 font-semibold">{kpis.losingTrades}L</span>
+                </span>
+              </div>
             </div>
-            <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
-              {formatPct(kpis.winRate, 1)}
+            <span className="text-[11px] text-slate-400 tabular-nums hidden sm:inline">
+              {kpis.totalTrades} trades
+            </span>
+          </div>
+
+          {/* 2. Avg Win / Avg Loss */}
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Avg Win / Avg Loss
+              </div>
+              <div className="flex items-baseline gap-1 mt-0.5 tabular-nums">
+                <span className="text-lg font-bold text-emerald-600">
+                  {formatPct(kpis.avgWinPercent, 1, true)}
+                </span>
+                <span className="text-slate-300 font-light">/</span>
+                <span className="text-lg font-bold text-rose-500">
+                  {formatPct(kpis.avgLossPercent, 1)}
+                </span>
+              </div>
             </div>
-            <div className="text-xs text-slate-500 mt-1 tabular-nums">
-              <span className="text-emerald-600 font-medium">
-                {kpis.winningTrades}W
-              </span>{" "}
-              /{" "}
-              <span className="text-rose-500 font-medium">
-                {kpis.losingTrades}L
-              </span>{" "}
-              ({kpis.totalTrades} total)
+            <div className="text-[11px] text-slate-400 tabular-nums hidden sm:block text-right">
+              <span className="text-emerald-600">+{kpis.avgWinR.toFixed(2)}R</span>
+              {" / "}
+              <span className="text-rose-500">{kpis.avgLossR.toFixed(2)}R</span>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Target className="w-5 h-5" />
+
+          {/* 3. Gain / Loss Ratio */}
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Gain / Loss Ratio
+              </div>
+              <div className="flex items-baseline gap-1.5 mt-0.5 tabular-nums">
+                <span className="text-lg font-bold text-slate-900">
+                  {kpis.gainLossRatio.toFixed(2)}x
+                </span>
+                <span
+                  className={`text-[10px] font-bold px-1 py-0.2 rounded ${
+                    kpis.gainLossRatio >= 2.0
+                      ? "bg-emerald-50 text-emerald-600"
+                      : "bg-amber-50 text-amber-600"
+                  }`}
+                >
+                  {kpis.gainLossRatio >= 2.0 ? "≥ 2.0x" : "< 2.0x"}
+                </span>
+              </div>
+            </div>
+            <span className="text-[11px] text-slate-400 hidden sm:inline">
+              Target: ≥ 2.0x
+            </span>
+          </div>
+
+          {/* 4. Expectancy & Total P&L */}
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Expectancy / Total P&L
+              </div>
+              <div className="flex items-baseline gap-2 mt-0.5 tabular-nums">
+                <span className="text-lg font-bold text-slate-900">
+                  {kpis.mathExpectancy >= 0 ? "+" : ""}
+                  {kpis.mathExpectancy.toFixed(2)}
+                </span>
+                <span
+                  className={`text-xs font-semibold ${
+                    kpis.totalGainLossEur >= 0 ? "text-emerald-600" : "text-rose-500"
+                  }`}
+                >
+                  ({formatEur(kpis.totalGainLossEur)})
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowDetails((prev) => !prev)}
+              className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-0.5 cursor-pointer"
+            >
+              <span>{showDetails ? "Less" : "More"}</span>
+              {showDetails ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Average Win % / Average Loss % */}
-        <div className="p-5 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Avg Win / Avg Loss
-            </div>
-            <div className="flex items-baseline gap-1.5 mt-1 tabular-nums">
-              <span className="text-2xl font-bold text-emerald-600">
-                {formatPct(kpis.avgWinPercent, 1, true)}
+        {/* Collapsible Secondary Metrics (Slim drawer when user clicks "More") */}
+        {showDetails && (
+          <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-2.5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs tabular-nums text-slate-600">
+            <div>
+              <span className="text-slate-400 text-[10px] uppercase font-semibold block">
+                Open Positions & Risk
               </span>
-              <span className="text-slate-300 font-light">/</span>
-              <span className="text-2xl font-bold text-rose-500">
-                {formatPct(kpis.avgLossPercent, 1)}
-              </span>
+              <div className="font-semibold text-slate-800 mt-0.5">
+                {kpis.openPositions} active (€{Math.round(kpis.openExposureEur).toLocaleString("en-US")} invested)
+              </div>
+              <div className="text-[11px] text-amber-600">
+                Risk at stop: €{kpis.openRiskEur.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </div>
             </div>
-            <div className="text-xs text-slate-500 mt-1 tabular-nums">
-              Avg R:{" "}
-              <span className="text-emerald-600 font-medium">
-                +{kpis.avgWinR.toFixed(2)}R
-              </span>{" "}
-              /{" "}
-              <span className="text-rose-500 font-medium">
-                {kpis.avgLossR.toFixed(2)}R
-              </span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <TrendingUp className="w-5 h-5" />
-          </div>
-        </div>
 
-        {/* Gain / Loss Ratio */}
-        <div className="p-5 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Gain / Loss Ratio
-            </div>
-            <div className="flex items-baseline gap-2 mt-1 tabular-nums">
-              <span className="text-2xl font-bold text-slate-900">
-                {kpis.gainLossRatio.toFixed(2)}
+            <div>
+              <span className="text-slate-400 text-[10px] uppercase font-semibold block">
+                Total Gain / Loss (€)
               </span>
-              <span
-                className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
-                  kpis.gainLossRatio >= 2.0
-                    ? "bg-emerald-50 text-emerald-600"
-                    : "bg-amber-50 text-amber-600"
+              <div
+                className={`font-semibold mt-0.5 ${
+                  kpis.totalGainLossEur >= 0 ? "text-emerald-600" : "text-rose-500"
                 }`}
               >
-                {kpis.gainLossRatio >= 2.0 ? "≥ 2.0x Target" : "< 2.0x"}
-              </span>
+                {formatEur(kpis.totalGainLossEur)}
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Realized: {formatEur(kpis.realizedGainLossEur)}
+              </div>
             </div>
-            <div className="text-xs text-slate-500 mt-1">
-              Avg Win % ÷ |Avg Loss %|
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Scale className="w-5 h-5" />
-          </div>
-        </div>
 
-        {/* Mathematical Expectancy */}
-        <div className="p-5 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Math. Expectancy
-            </div>
-            <div className="flex items-baseline gap-2 mt-1 tabular-nums">
-              <span className="text-2xl font-bold text-slate-900">
-                {kpis.mathExpectancy >= 0 ? "+" : ""}
-                {kpis.mathExpectancy.toFixed(2)}
+            <div>
+              <span className="text-slate-400 text-[10px] uppercase font-semibold block">
+                Total Gain / Loss ($ / Local)
               </span>
-              <span
-                className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
-                  expectancyPct >= 0
-                    ? "bg-emerald-50 text-emerald-600"
-                    : "bg-rose-50 text-rose-500"
+              <div
+                className={`font-semibold mt-0.5 ${
+                  kpis.totalGainLossUsdEquivalent >= 0
+                    ? "text-emerald-600"
+                    : "text-rose-500"
                 }`}
               >
-                {expectancyPct >= 0 ? "+" : ""}
-                {expectancyPct.toFixed(2)}% / trade
-              </span>
+                {formatUsd(kpis.totalGainLossUsdEquivalent)}
+              </div>
+              <div className="text-[11px] text-slate-400">
+                Open P&L: {formatEur(kpis.unrealizedGainLossEur)}
+              </div>
             </div>
-            <div className="text-xs text-slate-500 mt-1 tabular-nums">
-              Avg R-Multiple:{" "}
-              <span
-                className={
-                  kpis.avgRMultiple >= 0
-                    ? "text-emerald-600 font-medium"
-                    : "text-rose-500 font-medium"
-                }
-              >
+
+            <div>
+              <span className="text-slate-400 text-[10px] uppercase font-semibold block">
+                Average Trade Return
+              </span>
+              <div className="font-semibold text-slate-800 mt-0.5">
                 {kpis.avgRMultiple >= 0 ? "+" : ""}
-                {kpis.avgRMultiple.toFixed(2)}R
-              </span>
+                {kpis.avgRMultiple.toFixed(2)}R avg
+              </div>
+              <div className="text-[11px] text-slate-400">
+                {expectancyPct >= 0 ? "+" : ""}
+                {expectancyPct.toFixed(2)}% expectancy/trade
+              </div>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Sparkles className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Row 2: Secondary Ledger & P&L Strip */}
-      <div className="bg-white border border-slate-200/80 rounded-xl shadow-[0_1px_3px_rgba(15,23,42,0.03)] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
-        {/* Total Trades */}
-        <div className="p-4 px-5 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Total Trades
-            </div>
-            <div className="text-xl font-bold text-slate-900 mt-0.5 tabular-nums">
-              {kpis.totalTrades}
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5 tabular-nums">
-              {kpis.closedTrades} closed • {kpis.openPositions} active
-            </div>
-          </div>
-          <div className="w-9 h-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
-            <Activity className="w-4 h-4" />
-          </div>
-        </div>
-
-        {/* Open Positions & Active Risk */}
-        <div className="p-4 px-5 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Open Positions
-            </div>
-            <div className="flex items-baseline gap-2 mt-0.5 tabular-nums">
-              <span className="text-xl font-bold text-slate-900">
-                {kpis.openPositions}
-              </span>
-              <span className="text-xs text-slate-500">
-                (€{Math.round(kpis.openExposureEur).toLocaleString("en-US")} invested)
-              </span>
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5 tabular-nums">
-              Open Stop Risk:{" "}
-              <span className="text-amber-600 font-medium">
-                €{kpis.openRiskEur.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-              </span>
-            </div>
-          </div>
-          <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Briefcase className="w-4 h-4" />
-          </div>
-        </div>
-
-        {/* Total Gain / Loss (€) */}
-        <div className="p-4 px-5 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Total Gain / Loss (€)
-            </div>
-            <div
-              className={`text-xl font-bold mt-0.5 tabular-nums ${
-                kpis.totalGainLossEur >= 0 ? "text-emerald-600" : "text-rose-500"
-              }`}
-            >
-              {formatEur(kpis.totalGainLossEur)}
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5 tabular-nums">
-              Realized: {formatEur(kpis.realizedGainLossEur)}
-            </div>
-          </div>
-          <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <Euro className="w-4 h-4" />
-          </div>
-        </div>
-
-        {/* Total Gain / Loss ($ / Local) */}
-        <div className="p-4 px-5 flex items-center justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Total Gain / Loss ($)
-            </div>
-            <div
-              className={`text-xl font-bold mt-0.5 tabular-nums ${
-                kpis.totalGainLossUsdEquivalent >= 0
-                  ? "text-emerald-600"
-                  : "text-rose-500"
-              }`}
-            >
-              {formatUsd(kpis.totalGainLossUsdEquivalent)}
-            </div>
-            <div className="text-xs text-slate-500 mt-0.5 tabular-nums">
-              Open P&L: {formatEur(kpis.unrealizedGainLossEur)}
-            </div>
-          </div>
-          <div className="w-9 h-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
-            <DollarSign className="w-4 h-4" />
-          </div>
-        </div>
+        )}
       </div>
     </section>
   );
