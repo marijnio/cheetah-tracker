@@ -4,12 +4,14 @@ import React, { useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
+  TrendingUp,
 } from "lucide-react";
 import type { PortfolioKPIs } from "@/lib/sepa-math";
 
 interface KpiCardsProps {
   kpis: PortfolioKPIs;
   filterLabel?: string;
+  onOpenEquityCurve?: () => void;
 }
 
 function formatEur(val: number): string {
@@ -36,7 +38,7 @@ function formatPct(val: number, decimals = 1, showPlus = false): string {
   return `${sign}${pct.toFixed(decimals)}%`;
 }
 
-export function KpiCards({ kpis, filterLabel }: KpiCardsProps) {
+export function KpiCards({ kpis, filterLabel, onOpenEquityCurve }: KpiCardsProps) {
   const [showDetails, setShowDetails] = useState(false);
   const expectancyPct = kpis.mathExpectancy * 100;
 
@@ -144,18 +146,31 @@ export function KpiCards({ kpis, filterLabel }: KpiCardsProps) {
                 </span>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowDetails((prev) => !prev)}
-              className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-0.5 cursor-pointer"
-            >
-              <span>{showDetails ? "Less" : "More"}</span>
-              {showDetails ? (
-                <ChevronUp className="w-3.5 h-3.5" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-2">
+              {onOpenEquityCurve && (
+                <button
+                  type="button"
+                  onClick={onOpenEquityCurve}
+                  className="text-xs text-slate-500 hover:text-blue-600 font-medium inline-flex items-center gap-1 px-2 py-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer"
+                  title="Open Equity Curve & Drawdown Visualizer"
+                >
+                  <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="hidden xl:inline">Curve</span>
+                </button>
               )}
-            </button>
+              <button
+                type="button"
+                onClick={() => setShowDetails((prev) => !prev)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-0.5 cursor-pointer"
+              >
+                <span>{showDetails ? "Less" : "More"}</span>
+                {showDetails ? (
+                  <ChevronUp className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
 

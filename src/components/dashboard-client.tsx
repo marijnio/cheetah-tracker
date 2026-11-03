@@ -19,6 +19,7 @@ import { KpiCards } from "./kpi-cards";
 import { TradeTable } from "./trade-table";
 import { TradeModal } from "./trade-modal";
 import { PositionSizerModal } from "./position-sizer-modal";
+import { EquityCurveView } from "./equity-curve-view";
 import { SecuritiesView } from "./securities-view";
 import { ForexView } from "./forex-view";
 import {
@@ -41,7 +42,7 @@ interface DashboardClientProps {
   initialForexPairs: ForexPairRecord[];
 }
 
-type NavSection = "TRADES" | "SECURITIES" | "FOREX";
+type NavSection = "TRADES" | "EQUITY" | "SECURITIES" | "FOREX";
 type TradeFilterTab = "ALL" | "OPEN" | "CLOSED" | "TRIMMED";
 
 export function DashboardClient({
@@ -422,6 +423,13 @@ export function DashboardClient({
       badgeColor: "bg-blue-50 text-blue-700",
     },
     {
+      id: "EQUITY" as NavSection,
+      label: "Equity & Drawdown",
+      icon: TrendingUp,
+      count: closedCount,
+      badgeColor: "bg-emerald-50 text-emerald-700",
+    },
+    {
       id: "SECURITIES" as NavSection,
       label: "Securities Master",
       icon: Briefcase,
@@ -613,9 +621,11 @@ export function DashboardClient({
                   <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
                     {activeSection === "TRADES"
                       ? "Trading Performance Tracker • Open Exposure"
-                      : activeSection === "SECURITIES"
-                        ? "Master Entity Repository • Securities & Quote Feeds"
-                        : "Currency Conversion • Live & Historical ECB Feeds"}
+                      : activeSection === "EQUITY"
+                        ? "Performance Analytics • Cumulative Equity & Drawdown"
+                        : activeSection === "SECURITIES"
+                          ? "Master Entity Repository • Securities & Quote Feeds"
+                          : "Currency Conversion • Live & Historical ECB Feeds"}
                   </div>
                   <div className="flex flex-wrap items-baseline gap-3">
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 tabular-nums">
@@ -743,10 +753,13 @@ export function DashboardClient({
                   ? `${tradeFilter} (${filteredTrades.length} trades)`
                   : undefined
               }
+              onOpenEquityCurve={() => setActiveSection("EQUITY")}
             />
           )}
 
-          {activeSection === "SECURITIES" ? (
+          {activeSection === "EQUITY" ? (
+            <EquityCurveView trades={trades} />
+          ) : activeSection === "SECURITIES" ? (
             <SecuritiesView
               securities={securities}
               onCreateSecurity={handleCreateSecurity}
