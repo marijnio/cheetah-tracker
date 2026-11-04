@@ -85,6 +85,7 @@ Designed with a clean, light-mode interface inspired by *Portfolio Performance* 
 
 ## Navigation & Workflows
 
+* **Account Value & Cash Calibration:** Click **Edit Equity** (or **Account**) in the header to enter your current broker account value. What matters in SEPA trading is how effective your trades are—not historical starting capital or foreign currency drift on idle cash. Once anchored, your Total Account Value and Cash reserves automatically adjust as trades open/close and live quotes sync. Re-enter your broker balance anytime to recalibrate for cash FX drift, dividends, or fees.
 * **Trade Ledger:** Filter trades by **Summary (All)**, **Open Positions**, **Closed Trades**, or **2R Trimmed**. Use the search bar to filter by holding name or sector, and click column headers to sort.
 * **Securities Master:** Add and edit stocks, ETF feeds, and manual price overrides. Click the sync icon on any row to fetch the latest market quotes.
 * **Forex & Currencies:** Inspect exchange rates, configure live quote symbols, or use the built-in **Historical ECB Exchange Rate Lookup** tool.

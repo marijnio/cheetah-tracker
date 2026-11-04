@@ -12,6 +12,7 @@ interface KpiCardsProps {
   kpis: PortfolioKPIs;
   filterLabel?: string;
   onOpenEquityCurve?: () => void;
+  accountEquity?: number;
 }
 
 function formatEur(val: number): string {
@@ -38,9 +39,11 @@ function formatPct(val: number, decimals = 1, showPlus = false): string {
   return `${sign}${pct.toFixed(decimals)}%`;
 }
 
-export function KpiCards({ kpis, filterLabel, onOpenEquityCurve }: KpiCardsProps) {
+export function KpiCards({ kpis, filterLabel, onOpenEquityCurve, accountEquity }: KpiCardsProps) {
   const [showDetails, setShowDetails] = useState(false);
   const expectancyPct = kpis.mathExpectancy * 100;
+  const investedPct = accountEquity && accountEquity > 0 ? (kpis.openExposureEur / accountEquity) * 100 : undefined;
+  const riskPct = accountEquity && accountEquity > 0 ? (kpis.openRiskEur / accountEquity) * 100 : undefined;
 
   return (
     <section aria-label="Portfolio Performance KPIs" className="space-y-2">
@@ -182,10 +185,12 @@ export function KpiCards({ kpis, filterLabel, onOpenEquityCurve }: KpiCardsProps
                 Open Positions & Risk
               </span>
               <div className="font-semibold text-slate-800 mt-0.5">
-                {kpis.openPositions} active (€{Math.round(kpis.openExposureEur).toLocaleString("en-US")} invested)
+                {kpis.openPositions} active (€{Math.round(kpis.openExposureEur).toLocaleString("en-US")}
+                {investedPct !== undefined ? ` • ${investedPct.toFixed(1)}%` : " invested"})
               </div>
               <div className="text-[11px] text-amber-600">
                 Risk at stop: €{kpis.openRiskEur.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                {riskPct !== undefined ? ` (${riskPct.toFixed(2)}% acct)` : ""}
               </div>
             </div>
 
