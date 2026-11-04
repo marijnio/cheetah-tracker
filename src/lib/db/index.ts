@@ -103,7 +103,7 @@ const globalForDb = globalThis as unknown as {
   initializedVersion: number | undefined;
 };
 
-const CURRENT_DB_INIT_VERSION = 4;
+const CURRENT_DB_INIT_VERSION = 5;
 
 function getDatabasePath(): string {
   if (process.env.DATABASE_URL) {
@@ -163,6 +163,10 @@ function ensureSchemaAndSeed(db: DatabaseSync): void {
     .prepare("PRAGMA table_info(securities)")
     .all() as unknown as Array<{ name: string }>;
   const hasProviderSymbol = secCols.some((c) => c.name === "provider_symbol");
+  const hasTradingViewUrl = secCols.some((c) => c.name === "tradingview_url");
+  if (!hasTradingViewUrl) {
+    db.exec("ALTER TABLE securities ADD COLUMN tradingview_url TEXT;");
+  }
 
   if (hasProviderSymbol) {
     // 1. Update securities.ticker to provider_symbol where different
@@ -376,6 +380,7 @@ interface RawSecurityRow {
   last_quote_at: string | null;
   quote_status: string;
   quote_error: string | null;
+  tradingview_url?: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -398,6 +403,7 @@ function mapRowToSecurity(row: RawSecurityRow): SecurityRecord {
     quoteStatus:
       (row.quote_status as SecurityRecord["quoteStatus"]) || "PENDING",
     quoteError: row.quote_error,
+    tradingViewUrl: row.tradingview_url ?? null,
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -486,6 +492,7 @@ export function upsertSecurity(
           quote_provider = ?,
           provider_symbol = ?,
           latest_price = COALESCE(?, latest_price),
+          tradingview_url = ?,
           notes = COALESCE(?, notes),
           updated_at = ?
          WHERE id = ?`
@@ -499,6 +506,9 @@ export function upsertSecurity(
           : existing.quote_provider,
         ticker,
         input.latestPrice ?? null,
+        input.tradingViewUrl !== undefined
+          ? input.tradingViewUrl
+          : existing.tradingview_url ?? null,
         input.notes ?? null,
         now,
         existing.id
@@ -512,6 +522,7 @@ export function upsertSecurity(
           currency = ?,
           quote_provider = ?,
           latest_price = COALESCE(?, latest_price),
+          tradingview_url = ?,
           notes = COALESCE(?, notes),
           updated_at = ?
          WHERE id = ?`
@@ -524,6 +535,9 @@ export function upsertSecurity(
           ? quoteProvider
           : existing.quote_provider,
         input.latestPrice ?? null,
+        input.tradingViewUrl !== undefined
+          ? input.tradingViewUrl
+          : existing.tradingview_url ?? null,
         input.notes ?? null,
         now,
         existing.id
@@ -538,8 +552,8 @@ export function upsertSecurity(
         `INSERT INTO securities (
             ticker, name, isin, gics_sector, currency,
             quote_provider, provider_symbol, latest_price, previous_close,
-            last_quote_at, quote_status, quote_error, notes, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?)`
+            last_quote_at, quote_status, quote_error, tradingview_url, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?)`
       )
       .run(
         ticker,
@@ -552,17 +566,18 @@ export function upsertSecurity(
         input.latestPrice ?? null,
         input.latestPrice ? now : null,
         quoteProvider === "MANUAL" ? "MANUAL" : "PENDING",
+        input.tradingViewUrl ?? null,
         input.notes ?? null,
         now,
         now
       )
     : db
       .prepare(
-        `INSERT INTO securities (
-            ticker, name, isin, gics_sector, currency,
-            quote_provider, latest_price, previous_close,
-            last_quote_at, quote_status, quote_error, notes, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?)`
+        `INSERT INTO securities(
+        ticker, name, isin, gics_sector, currency,
+        quote_provider, latest_price, previous_close,
+            last_quote_at, quote_status, quote_error, tradingview_url, notes, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?)`
       )
       .run(
         ticker,
@@ -574,6 +589,7 @@ export function upsertSecurity(
         input.latestPrice ?? null,
         input.latestPrice ? now : null,
         quoteProvider === "MANUAL" ? "MANUAL" : "PENDING",
+        input.tradingViewUrl ?? null,
         input.notes ?? null,
         now,
         now
@@ -634,6 +650,7 @@ export function updateSecurityById(
         last_quote_at = ?,
         quote_status = ?,
         quote_error = ?,
+        tradingview_url = ?,
         notes = ?,
         updated_at = ?
        WHERE id = ?`
@@ -664,6 +681,9 @@ export function updateSecurityById(
         : updates.latestPrice !== undefined && updates.latestPrice !== null
           ? null
           : existing.quoteError,
+      updates.tradingViewUrl !== undefined
+        ? updates.tradingViewUrl
+        : existing.tradingViewUrl,
       updates.notes !== undefined ? updates.notes : existing.notes,
       now,
       id
@@ -682,6 +702,7 @@ export function updateSecurityById(
         last_quote_at = ?,
         quote_status = ?,
         quote_error = ?,
+        tradingview_url = ?,
         notes = ?,
         updated_at = ?
        WHERE id = ?`
@@ -711,6 +732,9 @@ export function updateSecurityById(
         : updates.latestPrice !== undefined && updates.latestPrice !== null
           ? null
           : existing.quoteError,
+      updates.tradingViewUrl !== undefined
+        ? updates.tradingViewUrl
+        : existing.tradingViewUrl,
       updates.notes !== undefined ? updates.notes : existing.notes,
       now,
       id
@@ -986,6 +1010,7 @@ interface RawTradeRow {
   quote_provider?: QuoteProviderType | null;
   quote_error?: string | null;
   quote_previous_close?: number | null;
+  security_tradingview_url?: string | null;
   gics_sector: string;
   start_date: string;
   end_date: string | null;
@@ -1036,6 +1061,7 @@ function mapRowToTrade(row: RawTradeRow): TradeRecord {
     quoteProvider: row.quote_provider ?? undefined,
     quoteError: row.quote_error ?? null,
     previousClose: row.quote_previous_close ?? null,
+    tradingViewUrl: row.security_tradingview_url ?? null,
   };
 }
 
@@ -1048,7 +1074,8 @@ export function getAllTrades(): TradeRecord[] {
            s.quote_status as quote_status,
            s.quote_provider as quote_provider,
            s.quote_error as quote_error,
-           s.previous_close as quote_previous_close
+           s.previous_close as quote_previous_close,
+           s.tradingview_url as security_tradingview_url
     FROM trades t
     LEFT JOIN securities s ON (s.id = t.security_id OR (t.security_id IS NULL AND s.ticker = t.ticker))
     ORDER BY
@@ -1071,7 +1098,8 @@ export function getTradeById(id: number): TradeRecord | null {
               s.quote_status as quote_status,
               s.quote_provider as quote_provider,
               s.quote_error as quote_error,
-              s.previous_close as quote_previous_close
+              s.previous_close as quote_previous_close,
+              s.tradingview_url as security_tradingview_url
        FROM trades t
        LEFT JOIN securities s ON (s.id = t.security_id OR (t.security_id IS NULL AND s.ticker = t.ticker))
        WHERE t.id = ?`

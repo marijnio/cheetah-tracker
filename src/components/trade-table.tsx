@@ -17,10 +17,12 @@ import {
   AlertTriangle,
   AlertCircle,
   Clock,
+  LineChart,
 } from "lucide-react";
 import type { ComputedTrade } from "@/lib/trade-math";
 import type { SecurityRecord, QuoteProviderType } from "@/lib/db/schema";
 import { getQuoteAgeInfo } from "@/lib/quote-age";
+import { resolveTradingViewUrl } from "@/lib/ticker-mapper";
 import { QuickQuoteModal } from "./quick-quote-modal";
 
 interface TradeTableProps {
@@ -408,34 +410,34 @@ export function TradeTable({
               </th>
 
               {/* 10. Position Size (Entry € / Latest € / Shares) */}
-                <th className="py-3.5 pl-3 pr-5 whitespace-nowrap border-l border-slate-200/60 min-w-[165px]">
-                  <div className="flex items-center justify-between gap-1">
+              <th className="py-3.5 pl-3 pr-5 whitespace-nowrap border-l border-slate-200/60 min-w-[165px]">
+                <div className="flex items-center justify-between gap-1">
+                  <span
+                    onClick={() => handleSort("entryValueEur")}
+                    className="cursor-pointer hover:text-slate-900"
+                    title="Sort by Entry Value (€)"
+                  >
+                    Size € {renderSortIcon("entryValueEur")}
+                  </span>
+                  <span className="text-[10px] font-medium text-slate-400">
                     <span
-                      onClick={() => handleSort("entryValueEur")}
-                      className="cursor-pointer hover:text-slate-900"
-                      title="Sort by Entry Value (€)"
+                      onClick={() => handleSort("latestValueEur")}
+                      className="cursor-pointer hover:text-slate-800"
+                      title="Sort by Latest/Exit Value (€)"
                     >
-                      Size € {renderSortIcon("entryValueEur")}
+                      Now {renderSortIcon("latestValueEur")}
                     </span>
-                    <span className="text-[10px] font-medium text-slate-400">
-                      <span
-                        onClick={() => handleSort("latestValueEur")}
-                        className="cursor-pointer hover:text-slate-800"
-                        title="Sort by Latest/Exit Value (€)"
-                      >
-                        Now {renderSortIcon("latestValueEur")}
-                      </span>
-                      <span className="text-slate-300 mx-0.5">•</span>
-                      <span
-                        onClick={() => handleSort("shares")}
-                        className="cursor-pointer hover:text-slate-800"
-                        title="Sort by Shares"
-                      >
-                        Shs {renderSortIcon("shares")}
-                      </span>
+                    <span className="text-slate-300 mx-0.5">•</span>
+                    <span
+                      onClick={() => handleSort("shares")}
+                      className="cursor-pointer hover:text-slate-800"
+                      title="Sort by Shares"
+                    >
+                      Shs {renderSortIcon("shares")}
                     </span>
-                  </div>
-                </th>
+                  </span>
+                </div>
+              </th>
             </tr>
           </thead>
 
@@ -467,6 +469,14 @@ export function TradeTable({
                   (linkedSecurity?.quoteProvider ??
                     trade.quoteProvider ??
                     "YAHOO") === "YAHOO";
+                const customTvUrl =
+                  linkedSecurity?.tradingViewUrl ??
+                  trade.tradingViewUrl ??
+                  null;
+                const tvChartUrl = resolveTradingViewUrl(
+                  trade.ticker,
+                  customTvUrl
+                );
 
                 const previousClose =
                   linkedSecurity?.previousClose ?? trade.previousClose ?? null;
@@ -503,42 +513,61 @@ export function TradeTable({
                         : "bg-white group-hover:bg-slate-50"
                         }`}
                     >
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-semibold text-blue-600 group-hover/ticker:text-blue-700 group-hover/ticker:underline decoration-blue-300 text-xs">
-                                {trade.ticker}
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-blue-600 group-hover/ticker:text-blue-700 group-hover/ticker:underline decoration-blue-300 text-xs">
+                              {trade.ticker}
+                            </span>
+                            {trade.currency !== "USD" && (
+                              <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                                {trade.currency}
                               </span>
-                              {trade.currency !== "USD" && (
-                                <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
-                                  {trade.currency}
-                                </span>
-                              )}
-                              {isOpen && (
-                                <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100 text-blue-700">
-                                  OPEN
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-slate-500 mt-0.5 max-w-[190px] truncate">
-                              {trade.securityName &&
-                                trade.securityName !== trade.ticker
-                                ? `${trade.securityName} • ${trade.gicsSector}`
-                                : trade.gicsSector}
-                            </div>
+                            )}
+                            {isOpen && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100 text-blue-700">
+                                OPEN
+                              </span>
+                            )}
                           </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 max-w-[190px] truncate">
+                            {trade.securityName &&
+                              trade.securityName !== trade.ticker
+                              ? `${trade.securityName} • ${trade.gicsSector}`
+                              : trade.gicsSector}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <a
+                            href={tvChartUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className={`p-1.5 rounded-lg transition-all cursor-pointer ${customTvUrl
+                              ? "text-blue-600 hover:bg-blue-50/90"
+                              : "text-slate-400 hover:text-blue-600 hover:bg-blue-50/80"
+                              }`}
+                            title={
+                              customTvUrl
+                                ? `Open saved TradingView chart (${customTvUrl})`
+                                : `Open ${trade.ticker} chart on TradingView`
+                            }
+                          >
+                            <LineChart className="w-3.5 h-3.5" />
+                          </a>
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               onEditTrade(trade, "edit");
                             }}
-                            className="p-1.5 rounded-lg text-slate-400 opacity-0 group-hover:opacity-100 hover:text-blue-600 hover:bg-blue-50/80 transition-all cursor-pointer shrink-0"
+                            className="p-1.5 rounded-lg text-slate-400 opacity-0 group-hover:opacity-100 hover:text-blue-600 hover:bg-blue-50/80 transition-all cursor-pointer"
                             title="Edit Trade"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
                         </div>
+                      </div>
                     </td>
 
                     {/* 2. Timeline (Dates + Trading Days Held) */}
@@ -889,50 +918,50 @@ export function TradeTable({
                     </td>
 
                     {/* 10. Position Size € (Entry €, Latest €, Shares + Muted Sizing Bar) */}
-                      <td className="py-3 pl-3 pr-5 whitespace-nowrap border-l border-slate-100">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span
-                              className="text-slate-800 font-medium"
-                              title={`Entry Value: ${formatEurValue(
-                                trade.entryValueEur
-                              )} (${formatLocalPrice(
+                    <td className="py-3 pl-3 pr-5 whitespace-nowrap border-l border-slate-100">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span
+                            className="text-slate-800 font-medium"
+                            title={`Entry Value: ${formatEurValue(
+                              trade.entryValueEur
+                            )} (${formatLocalPrice(
+                              trade.entryValueLocal,
+                              trade.currency
+                            )})`}
+                          >
+                            {formatEurValue(trade.entryValueEur)}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            {trade.shares.toLocaleString("en-US")} shs
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                          <span title="Latest / Exit Value in EUR">
+                            Now: {formatEurValue(trade.latestValueEur)}
+                          </span>
+                          {trade.currency !== "EUR" && (
+                            <span>
+                              {formatLocalPrice(
                                 trade.entryValueLocal,
                                 trade.currency
-                              )})`}
-                            >
-                              {formatEurValue(trade.entryValueEur)}
+                              )}
                             </span>
-                            <span className="text-[10px] text-slate-500 font-medium">
-                              {trade.shares.toLocaleString("en-US")} shs
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
-                            <span title="Latest / Exit Value in EUR">
-                              Now: {formatEurValue(trade.latestValueEur)}
-                            </span>
-                            {trade.currency !== "EUR" && (
-                              <span>
-                                {formatLocalPrice(
-                                  trade.entryValueLocal,
-                                  trade.currency
-                                )}
-                              </span>
-                            )}
-                          </div>
-                          <div
-                            className="w-full h-1 bg-slate-100 rounded-full overflow-hidden"
-                            title={`Relative entry position size (${Math.round(
-                              trade.entrySizePercentOfMax
-                            )}% of largest trade)`}
-                          >
-                            <div
-                              className="h-full rounded-full bg-slate-300/90 group-hover:bg-slate-400 transition-colors"
-                              style={{ width: `${trade.entrySizePercentOfMax}%` }}
-                            />
-                          </div>
+                          )}
                         </div>
-                      </td>
+                        <div
+                          className="w-full h-1 bg-slate-100 rounded-full overflow-hidden"
+                          title={`Relative entry position size (${Math.round(
+                            trade.entrySizePercentOfMax
+                          )}% of largest trade)`}
+                        >
+                          <div
+                            className="h-full rounded-full bg-slate-300/90 group-hover:bg-slate-400 transition-colors"
+                            style={{ width: `${trade.entrySizePercentOfMax}%` }}
+                          />
+                        </div>
+                      </div>
+                    </td>
                   </tr>
                 );
               })

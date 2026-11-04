@@ -103,3 +103,87 @@ export function mapToYahooTicker(rawInput: string, explicitCurrency?: string): P
   };
 }
 
+const YAHOO_SUFFIX_TO_TV_EXCHANGE: Record<string, string> = {
+  ".AS": "EURONEXT",
+  ".PA": "EURONEXT",
+  ".BR": "EURONEXT",
+  ".DE": "XETR",
+  ".F": "FWB",
+  ".MI": "MIL",
+  ".MC": "BME",
+  ".HE": "OMXHEX",
+  ".TO": "TSX",
+  ".V": "TSXV",
+  ".ST": "OMXSTO",
+  ".CO": "OMXCOP",
+  ".L": "LSE",
+  ".XC": "LSE",
+};
+
+const PREFIX_TO_TV_EXCHANGE: Record<string, string> = {
+  AMS: "EURONEXT",
+  EPA: "EURONEXT",
+  EBR: "EURONEXT",
+  ETR: "XETR",
+  FRA: "FWB",
+  BIT: "MIL",
+  BME: "BME",
+  HEL: "OMXHEX",
+  TSE: "TSX",
+  CVE: "TSXV",
+  STO: "OMXSTO",
+  CPH: "OMXCOP",
+  LON: "LSE",
+  NYSE: "NYSE",
+  NASDAQ: "NASDAQ",
+};
+
+/**
+ * Resolves a TradingView chart URL for a security.
+ * If an explicit `tradingViewUrl` is provided, uses that (or converts a `EXCHANGE:SYMBOL` shorthand to a full URL).
+ * Otherwise, constructs a default TradingView chart URL from the ticker symbol.
+ */
+export function resolveTradingViewUrl(
+  ticker: string,
+  customTradingViewUrl?: string | null
+): string {
+  const trimmedCustom = customTradingViewUrl?.trim();
+  if (trimmedCustom) {
+    if (
+      trimmedCustom.startsWith("http://") ||
+      trimmedCustom.startsWith("https://")
+    ) {
+      return trimmedCustom;
+    }
+    return `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(
+      trimmedCustom.toUpperCase()
+    )}`;
+  }
+
+  const cleaned = ticker.trim().toUpperCase();
+  if (!cleaned) return "https://www.tradingview.com/chart/";
+
+  if (cleaned.includes(":")) {
+    const [prefix, sym] = cleaned.split(":", 2);
+    const tvEx = PREFIX_TO_TV_EXCHANGE[prefix] || prefix;
+    const tvSym = sym.replace(/-/g, "_");
+    return `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(
+      `${tvEx}:${tvSym}`
+    )}`;
+  }
+
+  for (const [suffix, tvEx] of Object.entries(YAHOO_SUFFIX_TO_TV_EXCHANGE)) {
+    if (cleaned.endsWith(suffix)) {
+      const baseSym = cleaned.slice(0, -suffix.length).replace(/-/g, "_");
+      return `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(
+        `${tvEx}:${baseSym}`
+      )}`;
+    }
+  }
+
+  return `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(
+    cleaned
+  )}`;
+}
+
+

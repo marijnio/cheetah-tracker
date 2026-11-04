@@ -16,13 +16,14 @@ import {
   X,
   Sparkles,
   ArrowUpRight,
+  LineChart,
 } from "lucide-react";
 import type {
   SecurityRecord,
   NewSecurityInput,
   QuoteProviderType,
 } from "@/lib/db/schema";
-import { mapToYahooTicker } from "@/lib/ticker-mapper";
+import { mapToYahooTicker, resolveTradingViewUrl } from "@/lib/ticker-mapper";
 import { getQuoteAgeInfo } from "@/lib/quote-age";
 
 const GICS_SECTORS = [
@@ -92,6 +93,7 @@ export function SecuritiesView({
   const [quoteProvider, setQuoteProvider] =
     useState<QuoteProviderType>("YAHOO");
   const [latestPrice, setLatestPrice] = useState("");
+  const [tradingViewUrl, setTradingViewUrl] = useState("");
   const [notes, setNotes] = useState("");
   const [syncQuoteNow, setSyncQuoteNow] = useState(true);
   const [isLookingUp, setIsLookingUp] = useState(false);
@@ -140,6 +142,7 @@ export function SecuritiesView({
     setCurrency("USD");
     setQuoteProvider("YAHOO");
     setLatestPrice("");
+    setTradingViewUrl("");
     setNotes("");
     setSyncQuoteNow(true);
     setLookupMessage(null);
@@ -155,6 +158,7 @@ export function SecuritiesView({
     setCurrency(sec.currency || "USD");
     setQuoteProvider(sec.quoteProvider || "YAHOO");
     setLatestPrice(sec.latestPrice !== null ? String(sec.latestPrice) : "");
+    setTradingViewUrl(sec.tradingViewUrl || "");
     setNotes(sec.notes || "");
     setSyncQuoteNow(false);
     setLookupMessage(null);
@@ -228,6 +232,7 @@ export function SecuritiesView({
         currency,
         quoteProvider,
         latestPrice: latestPrice.trim() !== "" ? Number(latestPrice) : null,
+        tradingViewUrl: tradingViewUrl.trim() || null,
         notes: notes.trim() || null,
       };
 
@@ -379,8 +384,8 @@ export function SecuritiesView({
                   <tr
                     key={sec.id}
                     className={`group transition-colors ${hasOpen
-                        ? "bg-blue-50/20 hover:bg-blue-50/50"
-                        : "hover:bg-slate-50/80"
+                      ? "bg-blue-50/20 hover:bg-blue-50/50"
+                      : "hover:bg-slate-50/80"
                       }`}
                   >
                     {/* Security Ticker & Name */}
@@ -389,6 +394,25 @@ export function SecuritiesView({
                         <span className="font-semibold text-blue-600 text-xs font-mono">
                           {sec.ticker}
                         </span>
+                        <a
+                          href={resolveTradingViewUrl(
+                            sec.ticker,
+                            sec.tradingViewUrl
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`p-1 rounded transition-colors ${sec.tradingViewUrl
+                            ? "text-blue-600 hover:bg-blue-50"
+                            : "text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                            }`}
+                          title={
+                            sec.tradingViewUrl
+                              ? `Open saved TradingView chart (${sec.tradingViewUrl})`
+                              : `Open ${sec.ticker} chart on TradingView`
+                          }
+                        >
+                          <LineChart className="w-3.5 h-3.5" />
+                        </a>
                         {hasOpen && (
                           <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100 text-blue-700">
                             {sec.openTradeCount} OPEN
@@ -442,8 +466,8 @@ export function SecuritiesView({
                             {dayChangePct !== null && (
                               <span
                                 className={`px-1.5 py-0.2 rounded text-[10px] font-semibold ${dayChangePct >= 0
-                                    ? "bg-emerald-50 text-emerald-600"
-                                    : "bg-rose-50 text-rose-500"
+                                  ? "bg-emerald-50 text-emerald-600"
+                                  : "bg-rose-50 text-rose-500"
                                   }`}
                               >
                                 {dayChangePct >= 0 ? "+" : ""}
@@ -515,8 +539,8 @@ export function SecuritiesView({
                           </span>
                           <span
                             className={`text-[10px] mt-0.5 ${ageInfo.isDaysOld
-                                ? "text-amber-600 font-semibold"
-                                : "text-slate-400"
+                              ? "text-amber-600 font-semibold"
+                              : "text-slate-400"
                               }`}
                           >
                             {ageInfo.label}
@@ -558,6 +582,22 @@ export function SecuritiesView({
                     {/* Actions */}
                     <td className="py-3 pl-3 pr-5 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-1">
+                        <a
+                          href={resolveTradingViewUrl(
+                            sec.ticker,
+                            sec.tradingViewUrl
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                          title={
+                            sec.tradingViewUrl
+                              ? `Open saved TradingView chart`
+                              : `Open ${sec.ticker} chart on TradingView`
+                          }
+                        >
+                          <LineChart className="w-3.5 h-3.5" />
+                        </a>
                         {sec.quoteProvider === "YAHOO" && (
                           <button
                             type="button"
@@ -568,8 +608,8 @@ export function SecuritiesView({
                           >
                             <RefreshCw
                               className={`w-3.5 h-3.5 ${syncingId === sec.id
-                                  ? "animate-spin text-blue-600"
-                                  : ""
+                                ? "animate-spin text-blue-600"
+                                : ""
                                 }`}
                             />
                           </button>
@@ -709,6 +749,37 @@ export function SecuritiesView({
                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 font-mono uppercase focus:outline-none focus:border-blue-600"
                   />
                 </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-600">
+                    TradingView Chart URL or Symbol (Optional)
+                  </label>
+                  {ticker.trim() && (
+                    <a
+                      href={resolveTradingViewUrl(ticker, tradingViewUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700"
+                    >
+                      <LineChart className="w-3 h-3" />
+                      <span>Test Chart Link ↗</span>
+                    </a>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  placeholder="https://www.tradingview.com/chart/... or NASDAQ:NVDA (leave blank for auto)"
+                  value={tradingViewUrl}
+                  onChange={(e) => setTradingViewUrl(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Paste your custom TradingView chart layout URL or symbol (e.g.{" "}
+                  <code className="font-mono text-slate-600">EURONEXT:ASML</code>
+                  ). If left blank, a TradingView chart link is generated automatically from the ticker.
+                </p>
               </div>
 
               {/* Quote Provider Settings Box */}

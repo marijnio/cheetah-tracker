@@ -17,6 +17,7 @@ export interface SecurityRecord {
   quoteStatus: "OK" | "PENDING" | "ERROR" | "MANUAL";
   quoteError: string | null;
 
+  tradingViewUrl: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -34,6 +35,7 @@ export interface NewSecurityInput {
   currency?: string;
   quoteProvider?: QuoteProviderType;
   latestPrice?: number | null;
+  tradingViewUrl?: string | null;
   notes?: string | null;
 }
 
@@ -101,6 +103,7 @@ export interface TradeRecord {
   quoteProvider?: QuoteProviderType;
   quoteError?: string | null;
   previousClose?: number | null;
+  tradingViewUrl?: string | null;
 }
 
 export interface NewTradeInput {
@@ -136,6 +139,7 @@ export const SCHEMA_DDL = `
     last_quote_at TEXT,
     quote_status TEXT NOT NULL DEFAULT 'PENDING',
     quote_error TEXT,
+    tradingview_url TEXT,
     notes TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
