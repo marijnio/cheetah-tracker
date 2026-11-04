@@ -37,6 +37,7 @@ export function QuickQuoteModal({
   onSyncLiveQuote,
 }: QuickQuoteModalProps) {
   const [priceInput, setPriceInput] = useState("");
+  const [fetchedPrevClose, setFetchedPrevClose] = useState<number | null>(null);
   const [quoteProvider, setQuoteProvider] =
     useState<QuoteProviderType>("YAHOO");
   const [isSaving, setIsSaving] = useState(false);
@@ -56,6 +57,7 @@ export function QuickQuoteModal({
         trade.manualLatestPrice ??
         trade.buyPrice;
       setPriceInput(currentPrice ? String(currentPrice) : "");
+      setFetchedPrevClose(null);
       setQuoteProvider(
         security?.quoteProvider ?? trade.quoteProvider ?? "YAHOO"
       );
@@ -71,6 +73,22 @@ export function QuickQuoteModal({
   const lastQuoteAt = security?.lastQuoteAt ?? trade.lastQuoteAt;
   const ageInfo = getQuoteAgeInfo(lastQuoteAt);
 
+  const currentInputNum = Number(priceInput);
+  const isValidPrice = !isNaN(currentInputNum) && currentInputNum > 0;
+  const prevClose = fetchedPrevClose ?? security?.previousClose ?? null;
+  const dayDiff =
+    isValidPrice && prevClose && prevClose > 0 ? currentInputNum - prevClose : null;
+  const dayDiffPct =
+    dayDiff !== null && prevClose && prevClose > 0
+      ? (dayDiff / prevClose) * 100
+      : null;
+  const tradeDiff =
+    isValidPrice && trade.buyPrice > 0 ? currentInputNum - trade.buyPrice : null;
+  const tradeDiffPct =
+    tradeDiff !== null && trade.buyPrice > 0
+      ? (tradeDiff / trade.buyPrice) * 100
+      : null;
+
   const handleFetchFromYahoo = async () => {
     setIsLookingUp(true);
     setLookupMessage(null);
@@ -84,6 +102,9 @@ export function QuickQuoteModal({
       if (res.ok && data.lookup && data.lookup.latestPrice) {
         const fetchedPrice = Number(data.lookup.latestPrice);
         setPriceInput(String(fetchedPrice));
+        if (data.lookup.previousClose) {
+          setFetchedPrevClose(Number(data.lookup.previousClose));
+        }
         setLookupMessage({
           text: `Fetched live price: ${currency} ${fetchedPrice.toLocaleString(
             "en-US",
@@ -283,6 +304,31 @@ export function QuickQuoteModal({
                 {currency}
               </span>
             </div>
+
+            {/* Live Metrics Preview for this price */}
+            {isValidPrice && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 py-2 px-3 bg-slate-50 border border-slate-200/80 rounded-lg text-xs">
+                {prevClose && dayDiff !== null && dayDiffPct !== null && (
+                  <div>
+                    <span className="text-slate-500 font-medium">1D Today:</span>{" "}
+                    <strong className={dayDiffPct >= 0 ? "text-emerald-600" : "text-rose-500"}>
+                      {dayDiff >= 0 ? "+" : ""}{currency} {dayDiff.toFixed(2)} ({dayDiffPct >= 0 ? "+" : ""}{dayDiffPct.toFixed(2)}%)
+                    </strong>
+                    <span className="text-[10px] text-slate-400 ml-1">(vs prev close {prevClose.toFixed(2)})</span>
+                  </div>
+                )}
+                {tradeDiff !== null && tradeDiffPct !== null && (
+                  <div>
+                    <span className="text-slate-500 font-medium">Trade Return:</span>{" "}
+                    <strong className={tradeDiffPct >= 0 ? "text-emerald-600" : "text-rose-500"}>
+                      {tradeDiff >= 0 ? "+" : ""}{currency} {tradeDiff.toFixed(2)} ({tradeDiffPct >= 0 ? "+" : ""}{tradeDiffPct.toFixed(2)}%)
+                    </strong>
+                    <span className="text-[10px] text-slate-400 ml-1">(vs buy {trade.buyPrice.toFixed(2)})</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <p className="text-[11px] text-slate-500">
               Saving this quote will immediately update open position metrics,
               gain/loss %, R-multiples, and portfolio KPIs.
