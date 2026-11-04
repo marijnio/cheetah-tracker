@@ -10,7 +10,7 @@ import {
   AlertTriangle,
   Clock,
 } from "lucide-react";
-import type { ComputedTrade } from "@/lib/sepa-math";
+import type { ComputedTrade } from "@/lib/trade-math";
 import type {
   NewTradeInput,
   SecurityRecord,
@@ -681,7 +681,7 @@ export function TradeModal({
             </div>
           </div>
 
-          {/* Row 4: SEPA Discipline Checkboxes */}
+          {/* Row 4: Trade Discipline Checkboxes */}
           <div className="flex flex-wrap items-center gap-6 pt-1">
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
               <input
@@ -708,7 +708,7 @@ export function TradeModal({
             </label>
           </div>
 
-          {/* Live SEPA Math Preview Card */}
+          {/* Live Trade Math Preview Card */}
           <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs tabular-nums">
             <div>
               <div className="text-slate-400 font-medium uppercase text-[10px]">

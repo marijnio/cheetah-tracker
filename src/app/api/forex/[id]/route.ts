@@ -9,7 +9,7 @@ import {
   getLiveQuoteMap,
   getLiveFxMap,
 } from "@/lib/db";
-import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/sepa-math";
+import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 import {
   fetchYahooQuote,
   fetchFrankfurterFxToEur,

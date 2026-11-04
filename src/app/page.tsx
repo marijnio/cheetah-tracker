@@ -6,7 +6,7 @@ import {
   getLiveQuoteMap,
   getLiveFxMap,
 } from "@/lib/db";
-import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/sepa-math";
+import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 import { DashboardClient } from "@/components/dashboard-client";
 
 export const dynamic = "force-dynamic";

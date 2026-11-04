@@ -25,11 +25,13 @@ import { EquityCurveView } from "./equity-curve-view";
 import { SecuritiesView } from "./securities-view";
 import { ForexView } from "./forex-view";
 import { AccountEquityModal } from "./account-equity-modal";
+import { AboutModal } from "./about-modal";
+import { APP_VERSION } from "@/lib/version";
 import {
   computePortfolioKPIs,
   type ComputedTrade,
   type PortfolioKPIs,
-} from "@/lib/sepa-math";
+} from "@/lib/trade-math";
 import type {
   NewTradeInput,
   SecurityRecord,
@@ -92,6 +94,7 @@ export function DashboardClient({
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [cashBalance, setCashBalance] = useState<number>(25000);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
 
   React.useEffect(() => {
     if (typeof window !== "undefined") {
@@ -424,7 +427,7 @@ export function DashboardClient({
   const handleResetToSample = async () => {
     if (
       !window.confirm(
-        "Reset database to the original 132 trades from sample-data/SEPA Trading Performance Tracker - Trades.csv?"
+        "Reset database to the original 132 sample trades?"
       )
     ) {
       return;
@@ -544,8 +547,18 @@ export function DashboardClient({
             </div>
             {!isSidebarCollapsed && (
               <div className="truncate">
-                <div className="font-bold text-sm tracking-tight text-slate-900 leading-tight">
-                  Trade Tracker
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-sm tracking-tight text-slate-900 leading-tight">
+                    Trade Tracker
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsAboutModalOpen(true)}
+                    className="text-[10px] font-mono font-medium px-1.5 py-0.2 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer border border-slate-200/60"
+                    title="Click for app version & details"
+                  >
+                    v{APP_VERSION}
+                  </button>
                 </div>
                 <div className="text-[11px] text-slate-400 font-medium">
                   Performance Ledger
@@ -636,14 +649,27 @@ export function DashboardClient({
                   EUR (€)
                 </span>
               </div>
-              <div className="text-[10px] text-slate-400">
-                132 trades registered
+              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                <span>{trades.length} trades registered</span>
+                <button
+                  type="button"
+                  onClick={() => setIsAboutModalOpen(true)}
+                  className="font-mono text-slate-400 hover:text-slate-700 transition-colors cursor-pointer hover:underline"
+                  title="Click for app version & details"
+                >
+                  v{APP_VERSION}
+                </button>
               </div>
             </div>
           ) : (
-            <div className="text-center font-mono text-[10px] text-slate-400 py-1">
-              EUR
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsAboutModalOpen(true)}
+              className="w-full text-center font-mono text-[10px] text-slate-400 hover:text-slate-700 transition-colors cursor-pointer py-1"
+              title={`Trade Tracker v${APP_VERSION} (click for details)`}
+            >
+              v{APP_VERSION}
+            </button>
           )}
         </div>
       </aside>
@@ -905,6 +931,26 @@ export function DashboardClient({
               isImporting={isImporting}
             />
           )}
+
+          {/* Page Footer */}
+          <footer className="pt-6 pb-2 border-t border-slate-200/70 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-slate-500">Trade Tracker</span>
+              <span>•</span>
+              <span>Performance &amp; Risk Ledger</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span>Version:</span>
+              <button
+                type="button"
+                onClick={() => setIsAboutModalOpen(true)}
+                className="font-mono font-medium px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200/80 transition-colors cursor-pointer"
+                title="Click for full version details"
+              >
+                v{APP_VERSION}
+              </button>
+            </div>
+          </footer>
         </main>
       </div>
 
@@ -943,6 +989,12 @@ export function DashboardClient({
         cashBalance={cashBalance}
         openExposureEur={displayedKpis.openExposureEur}
         onSaveCashBalance={handleSaveCashBalance}
+      />
+
+      <AboutModal
+        isOpen={isAboutModalOpen}
+        onClose={() => setIsAboutModalOpen(false)}
+        version={APP_VERSION}
       />
     </div>
   );

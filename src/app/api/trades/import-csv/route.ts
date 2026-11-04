@@ -10,7 +10,7 @@ import {
   getLiveQuoteMap,
   getLiveFxMap,
 } from "@/lib/db";
-import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/sepa-math";
+import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       const samplePath = path.join(
         process.cwd(),
         "sample-data",
-        "SEPA Trading Performance Tracker - Trades.csv"
+        "sample-trades.csv"
       );
       if (!fs.existsSync(samplePath)) {
         return NextResponse.json(

@@ -6,7 +6,7 @@ import {
   ChevronUp,
   TrendingUp,
 } from "lucide-react";
-import type { PortfolioKPIs } from "@/lib/sepa-math";
+import type { PortfolioKPIs } from "@/lib/trade-math";
 
 interface KpiCardsProps {
   kpis: PortfolioKPIs;
@@ -114,11 +114,10 @@ export function KpiCards({ kpis, filterLabel, onOpenEquityCurve, accountEquity }
                   {kpis.gainLossRatio.toFixed(2)}x
                 </span>
                 <span
-                  className={`text-[10px] font-bold px-1 py-0.2 rounded ${
-                    kpis.gainLossRatio >= 2.0
+                  className={`text-[10px] font-bold px-1 py-0.2 rounded ${kpis.gainLossRatio >= 2.0
                       ? "bg-emerald-50 text-emerald-600"
                       : "bg-amber-50 text-amber-600"
-                  }`}
+                    }`}
                 >
                   {kpis.gainLossRatio >= 2.0 ? "≥ 2.0x" : "< 2.0x"}
                 </span>
@@ -141,9 +140,8 @@ export function KpiCards({ kpis, filterLabel, onOpenEquityCurve, accountEquity }
                   {kpis.mathExpectancy.toFixed(2)}
                 </span>
                 <span
-                  className={`text-xs font-semibold ${
-                    kpis.totalGainLossEur >= 0 ? "text-emerald-600" : "text-rose-500"
-                  }`}
+                  className={`text-xs font-semibold ${kpis.totalGainLossEur >= 0 ? "text-emerald-600" : "text-rose-500"
+                    }`}
                 >
                   ({formatEur(kpis.totalGainLossEur)})
                 </span>
@@ -199,9 +197,8 @@ export function KpiCards({ kpis, filterLabel, onOpenEquityCurve, accountEquity }
                 Total Gain / Loss (€)
               </span>
               <div
-                className={`font-semibold mt-0.5 ${
-                  kpis.totalGainLossEur >= 0 ? "text-emerald-600" : "text-rose-500"
-                }`}
+                className={`font-semibold mt-0.5 ${kpis.totalGainLossEur >= 0 ? "text-emerald-600" : "text-rose-500"
+                  }`}
               >
                 {formatEur(kpis.totalGainLossEur)}
               </div>
@@ -215,11 +212,10 @@ export function KpiCards({ kpis, filterLabel, onOpenEquityCurve, accountEquity }
                 Total Gain / Loss ($ / Local)
               </span>
               <div
-                className={`font-semibold mt-0.5 ${
-                  kpis.totalGainLossUsdEquivalent >= 0
+                className={`font-semibold mt-0.5 ${kpis.totalGainLossUsdEquivalent >= 0
                     ? "text-emerald-600"
                     : "text-rose-500"
-                }`}
+                  }`}
               >
                 {formatUsd(kpis.totalGainLossUsdEquivalent)}
               </div>

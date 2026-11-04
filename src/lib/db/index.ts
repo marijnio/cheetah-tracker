@@ -113,7 +113,7 @@ function getDatabasePath(): string {
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
-  return path.join(dataDir, "sepa-tracker.db");
+  return path.join(dataDir, "cheetah-tracker.db");
 }
 
 export function getDb(): DatabaseSync {
@@ -204,7 +204,7 @@ function ensureSchemaAndSeed(db: DatabaseSync): void {
     const sampleCsvPath = path.join(
       process.cwd(),
       "sample-data",
-      "SEPA Trading Performance Tracker - Trades.csv"
+      "sample-trades.csv"
     );
     if (fs.existsSync(sampleCsvPath)) {
       try {

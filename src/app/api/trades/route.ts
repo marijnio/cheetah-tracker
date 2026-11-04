@@ -7,7 +7,7 @@ import {
   getLiveQuoteMap,
   getLiveFxMap,
 } from "@/lib/db";
-import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/sepa-math";
+import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 import type { NewTradeInput } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -65,8 +65,8 @@ export async function POST(request: Request) {
       buyPrice: Number(body.buyPrice),
       sellPrice:
         body.sellPrice !== null &&
-        body.sellPrice !== undefined &&
-        String(body.sellPrice) !== ""
+          body.sellPrice !== undefined &&
+          String(body.sellPrice) !== ""
           ? Number(body.sellPrice)
           : null,
       currency: body.currency || "USD",
@@ -75,8 +75,8 @@ export async function POST(request: Request) {
       trimmedAt2R: Boolean(body.trimmedAt2R),
       manualLatestPrice:
         body.manualLatestPrice !== null &&
-        body.manualLatestPrice !== undefined &&
-        String(body.manualLatestPrice) !== ""
+          body.manualLatestPrice !== undefined &&
+          String(body.manualLatestPrice) !== ""
           ? Number(body.manualLatestPrice)
           : null,
       fxRateToEur:

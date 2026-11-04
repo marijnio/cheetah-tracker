@@ -11,7 +11,7 @@ import {
   Globe,
   Sliders,
 } from "lucide-react";
-import type { ComputedTrade } from "@/lib/sepa-math";
+import type { ComputedTrade } from "@/lib/trade-math";
 import type { SecurityRecord, QuoteProviderType } from "@/lib/db/schema";
 import { getQuoteAgeInfo } from "@/lib/quote-age";
 
@@ -271,8 +271,8 @@ export function QuickQuoteModal({
           {lookupMessage && (
             <div
               className={`text-xs rounded-lg px-3 py-2 border ${lookupMessage.isError
-                  ? "bg-rose-50 text-rose-700 border-rose-200"
-                  : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                ? "bg-rose-50 text-rose-700 border-rose-200"
+                : "bg-emerald-50 text-emerald-800 border-emerald-200"
                 }`}
             >
               {lookupMessage.text}
@@ -345,8 +345,8 @@ export function QuickQuoteModal({
                 type="button"
                 onClick={() => setQuoteProvider("YAHOO")}
                 className={`flex items-center gap-2 p-2.5 rounded-lg border text-left transition-colors cursor-pointer ${quoteProvider === "YAHOO"
-                    ? "border-blue-600 bg-blue-50/50 text-blue-900"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  ? "border-blue-600 bg-blue-50/50 text-blue-900"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   }`}
               >
                 <Globe className="w-4 h-4 text-blue-600 shrink-0" />
@@ -362,8 +362,8 @@ export function QuickQuoteModal({
                 type="button"
                 onClick={() => setQuoteProvider("MANUAL")}
                 className={`flex items-center gap-2 p-2.5 rounded-lg border text-left transition-colors cursor-pointer ${quoteProvider === "MANUAL"
-                    ? "border-blue-600 bg-blue-50/50 text-blue-900"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  ? "border-blue-600 bg-blue-50/50 text-blue-900"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   }`}
               >
                 <Sliders className="w-4 h-4 text-slate-600 shrink-0" />

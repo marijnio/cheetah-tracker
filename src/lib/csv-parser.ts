@@ -34,7 +34,7 @@ function parseNumber(val: unknown): number | null {
 }
 
 /**
- * Parses Google Sheets SEPA Trading Performance Tracker CSV into normalized NewTradeInput rows.
+ * Parses Google Sheets trading performance tracker CSV into normalized NewTradeInput rows.
  * Handles both the 3-row summary header format and direct 1-row column header CSVs.
  */
 export function parseTradesCsv(csvContent: string): NewTradeInput[] {

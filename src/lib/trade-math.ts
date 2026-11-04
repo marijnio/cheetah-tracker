@@ -43,7 +43,7 @@ export interface PortfolioKPIs {
 
 /**
  * Counts business days (Mon-Fri) between two YYYY-MM-DD dates.
- * Matches Google Sheets `NETWORKDAYS(start, end) - 1` where same-day trade = 0 days held.
+ * Matches `NETWORKDAYS(start, end) - 1` where same-day trade = 0 days held.
  */
 export function calculateTradingDaysHeld(startDateStr: string, endDateStr?: string | null, todayStr?: string): number {
   const startParts = startDateStr.split("-").map(Number);
@@ -75,7 +75,7 @@ export function calculateTradingDaysHeld(startDateStr: string, endDateStr?: stri
 }
 
 /**
- * Enriches raw trade records with all SEPA calculated fields and relative sizing bar widths.
+ * Enriches raw trade records with calculated performance fields and relative sizing bar widths.
  */
 export function computeTradesWithMetrics(
   rawTrades: TradeRecord[],
@@ -169,7 +169,7 @@ export function computeTradesWithMetrics(
 }
 
 /**
- * Computes top-level SEPA KPI summary metrics across a list of computed trades.
+ * Computes top-level portfolio KPI summary metrics across a list of computed trades.
  */
 export function computePortfolioKPIs(trades: ComputedTrade[]): PortfolioKPIs {
   const totalTrades = trades.length;
@@ -179,9 +179,7 @@ export function computePortfolioKPIs(trades: ComputedTrade[]): PortfolioKPIs {
   const openPositions = openTrades.length;
   const closedTrades = closedTradesList.length;
 
-  // In Minervini's SEPA tracking (and matching the Google Sheet), Win Rate, Avg Win %, Avg Loss %
-  // evaluate all trades with a non-zero outcome or all trades in the ledger.
-  // Let's check: in the Google Sheet, 68 wins / 132 total = 51.515% (51.5%).
+  // Evaluate win/loss distribution across trades in the ledger
   const winners = trades.filter((t) => t.gainLossPercent > 0);
   const losers = trades.filter((t) => t.gainLossPercent <= 0);
 

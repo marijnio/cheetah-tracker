@@ -8,7 +8,7 @@ import {
   getLiveQuoteMap,
   getLiveFxMap,
 } from "@/lib/db";
-import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/sepa-math";
+import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 import type { NewTradeInput } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";

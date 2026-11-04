@@ -37,7 +37,7 @@ Designed with a clean, light-mode interface inspired by *Portfolio Performance* 
 ### 4. Self-Hosting & Synology NAS Ready
 * **Single-Container Architecture:** Built with Next.js (App Router, React 19) and Node's native `DatabaseSync` SQLite engine running in WAL mode.
 * **Zero C++ Build Toolchains:** Eliminates fragile native compilation dependencies (`node-gyp`, Python, C++ headers) on NAS environments.
-* **Persistent Local Storage:** The entire database resides in a single `./data/sepa-tracker.db` file, ideal for Docker volume mapping and automated Synology Hyper Backup.
+* **Persistent Local Storage:** The entire database resides in a single `./data/cheetah-tracker.db` file, ideal for Docker volume mapping and automated Synology Hyper Backup.
 
 ---
 
@@ -79,7 +79,7 @@ Designed with a clean, light-mode interface inspired by *Portfolio Performance* 
 4. **Open the application:**
    Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
 
-> **Note on First Launch:** The database will automatically initialize at `./data/sepa-tracker.db` and seed existing trade history and securities from `sample-data/`.
+> **Note on First Launch:** The database will automatically initialize at `./data/cheetah-tracker.db` and seed existing trade history and securities from `sample-data/`.
 
 ---
 
@@ -102,7 +102,7 @@ cheetah-tracker/
 │   ├── favicon.svg             # Application browser favicon
 │   └── logo.svg                # Vector brand logo
 ├── sample-data/
-│   └── SEPA Trading Performance Tracker - Trades.csv
+│   └── sample-trades.csv
 ├── src/
 │   ├── app/
 │   │   ├── api/
@@ -124,7 +124,7 @@ cheetah-tracker/
 │       ├── csv-parser.ts       # CSV importer & anomaly healing
 │       ├── db/                 # SQLite connection, DDL, and repositories
 │       ├── quote-provider.ts   # Yahoo Finance & Frankfurter API clients
-│       ├── sepa-math.ts        # Pure domain math & risk metrics
+│       ├── trade-math.ts       # Pure domain math & risk metrics
 │       └── ticker-mapper.ts    # Exchange prefix-to-suffix translator
 ├── data/                       # Local SQLite storage (git-ignored)
 ├── package.json
