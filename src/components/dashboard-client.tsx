@@ -90,36 +90,25 @@ export function DashboardClient({
   );
   const [isImporting, setIsImporting] = useState(false);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const [anchorValue, setAnchorValue] = useState<number>(50000);
-  const [anchorPnl, setAnchorPnl] = useState<number>(initialKpis.totalGainLossEur);
-  const [anchorUpdatedAt, setAnchorUpdatedAt] = useState<string | null>(null);
+  const [cashBalance, setCashBalance] = useState<number>(25000);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
 
   React.useEffect(() => {
     if (typeof window !== "undefined") {
       const loadFromStorage = () => {
-        const rawAnchor = localStorage.getItem("cheetah_account_anchor");
-        if (rawAnchor) {
-          try {
-            const parsed = JSON.parse(rawAnchor);
-            if (typeof parsed.value === "number" && !isNaN(parsed.value)) {
-              setAnchorValue(parsed.value);
-              setAnchorPnl(
-                typeof parsed.pnlAtSet === "number"
-                  ? parsed.pnlAtSet
-                  : initialKpis.totalGainLossEur
-              );
-              setAnchorUpdatedAt(parsed.updatedAt || null);
-              return;
-            }
-          } catch {
-            // fallback below
-          }
+        const savedCash = localStorage.getItem("cheetah_cash_balance");
+        if (savedCash && !isNaN(Number(savedCash)) && Number(savedCash) >= 0) {
+          setCashBalance(Number(savedCash));
+          return;
         }
+        // Fallback: if user previously had cheetah_account_equity, deduce cash
         const savedEquity = localStorage.getItem("cheetah_account_equity");
         if (savedEquity && !isNaN(Number(savedEquity)) && Number(savedEquity) > 0) {
-          setAnchorValue(Number(savedEquity));
-          setAnchorPnl(initialKpis.totalGainLossEur);
+          const impliedCash = Math.max(
+            0,
+            Number(savedEquity) - initialKpis.openExposureEur
+          );
+          setCashBalance(impliedCash);
         }
       };
 
@@ -127,25 +116,21 @@ export function DashboardClient({
       window.addEventListener("storage", loadFromStorage);
       return () => window.removeEventListener("storage", loadFromStorage);
     }
-  }, [initialKpis.totalGainLossEur]);
+  }, [initialKpis.openExposureEur]);
 
-  const handleSaveAccountValue = (newAccountValue: number) => {
-    const nowIso = new Date().toISOString();
-    setAnchorValue(newAccountValue);
-    setAnchorPnl(globalKpis.totalGainLossEur);
-    setAnchorUpdatedAt(nowIso);
+  const handleSaveCashBalance = (newCash: number) => {
+    setCashBalance(newCash);
+    const total = newCash + displayedKpis.openExposureEur;
     if (typeof window !== "undefined") {
-      localStorage.setItem(
-        "cheetah_account_anchor",
-        JSON.stringify({
-          value: newAccountValue,
-          pnlAtSet: globalKpis.totalGainLossEur,
-          updatedAt: nowIso,
-        })
-      );
-      localStorage.setItem("cheetah_account_equity", String(newAccountValue));
+      localStorage.setItem("cheetah_cash_balance", String(newCash));
+      localStorage.setItem("cheetah_account_equity", String(Math.round(total)));
       window.dispatchEvent(new Event("storage"));
     }
+  };
+
+  const handleAccountEquityChangeFromSizer = (newTotal: number) => {
+    const newCash = Math.max(0, newTotal - displayedKpis.openExposureEur);
+    handleSaveCashBalance(newCash);
   };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -463,15 +448,12 @@ export function DashboardClient({
   const closedCount = trades.filter((t) => !t.isOpen).length;
   const trimmedCount = trades.filter((t) => t.trimmedAt2R).length;
   const isPositiveNet = displayedKpis.totalGainLossEur >= 0;
-  const pnlSinceAnchor = globalKpis.totalGainLossEur - anchorPnl;
-  const currentTotalEquity = Math.max(0, anchorValue + pnlSinceAnchor);
-  const cashAvailable = Math.max(
-    0,
-    currentTotalEquity - displayedKpis.openExposureEur
-  );
+  const openExposureEur = displayedKpis.openExposureEur;
+  const currentTotalEquity = Math.max(0, cashBalance + openExposureEur);
+  const cashAvailable = cashBalance;
   const investedPercent =
     currentTotalEquity > 0
-      ? (displayedKpis.openExposureEur / currentTotalEquity) * 100
+      ? (openExposureEur / currentTotalEquity) * 100
       : 0;
   const cashPercent =
     currentTotalEquity > 0 ? (cashAvailable / currentTotalEquity) * 100 : 0;
@@ -695,11 +677,11 @@ export function DashboardClient({
                     <button
                       type="button"
                       onClick={() => setIsAccountModalOpen(true)}
-                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-700 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/80 rounded px-1.5 py-0.2 transition-colors cursor-pointer capitalize tracking-normal"
-                      title="Anchored to your current broker account value — auto-adjusts as trade P&L changes. Click to recalibrate anytime."
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 rounded px-1.5 py-0.2 transition-colors cursor-pointer capitalize tracking-normal"
+                      title="Update Current Cash Balance"
                     >
                       <Pencil className="w-2.5 h-2.5" />
-                      <span>Edit Equity</span>
+                      <span>Edit Cash</span>
                     </button>
                   </div>
                   <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
@@ -708,7 +690,7 @@ export function DashboardClient({
                       onClick={() => setIsAccountModalOpen(true)}
                       suppressHydrationWarning
                       className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 tabular-nums hover:text-blue-600 transition-colors text-left cursor-pointer group"
-                      title="Anchored to your broker balance (auto-adjusts with new trade P&L). Click to recalibrate."
+                      title="Total Account Value = Cash (€) + In Trades (€). Click to update Cash."
                     >
                       €{Math.round(currentTotalEquity).toLocaleString("en-US")}
                     </button>
@@ -736,22 +718,28 @@ export function DashboardClient({
                       </span>
                     </span>
 
-                    {/* Breakdown: In Trades vs Cash */}
+                    {/* Breakdown: Cash vs In Trades */}
                     <div className="flex items-center gap-2.5 text-xs text-slate-500 font-medium tabular-nums sm:border-l sm:border-slate-200 sm:pl-3">
+                      <button
+                        type="button"
+                        onClick={() => setIsAccountModalOpen(true)}
+                        className="hover:text-emerald-700 transition-colors cursor-pointer flex items-center gap-1 group"
+                        title="Click to edit Cash balance"
+                      >
+                        <span className="text-slate-500">Cash:</span>{" "}
+                        <strong className="text-slate-800 font-semibold group-hover:text-emerald-700">
+                          €{Math.round(cashAvailable).toLocaleString("en-US")}
+                        </strong>{" "}
+                        <span className="text-slate-400">({cashPercent.toFixed(1)}%)</span>
+                        <Pencil className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-600" />
+                      </button>
+                      <span className="text-slate-300">•</span>
                       <span title="Capital currently invested in open positions">
                         In Trades:{" "}
                         <strong className="text-slate-800 font-semibold">
                           €{Math.round(displayedKpis.openExposureEur).toLocaleString("en-US")}
                         </strong>{" "}
                         <span className="text-slate-400">({investedPercent.toFixed(1)}%)</span>
-                      </span>
-                      <span className="text-slate-300">•</span>
-                      <span title="Available cash balance for new setups">
-                        Cash:{" "}
-                        <strong className="text-slate-800 font-semibold">
-                          €{Math.round(cashAvailable).toLocaleString("en-US")}
-                        </strong>{" "}
-                        <span className="text-slate-400">({cashPercent.toFixed(1)}%)</span>
                       </span>
                     </div>
                   </div>
@@ -764,10 +752,11 @@ export function DashboardClient({
                   type="button"
                   onClick={() => setIsAccountModalOpen(true)}
                   className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-                  title="Configure Account Starting Capital & Equity"
+                  title="Update your current cash balance"
                 >
-                  <Wallet className="w-3.5 h-3.5 text-blue-600" />
-                  <span className="hidden sm:inline">Account</span>
+                  <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="hidden sm:inline">Cash: €{Math.round(cashBalance).toLocaleString("en-US")}</span>
+                  <span className="sm:hidden">Cash</span>
                 </button>
                 <button
                   type="button"
@@ -945,18 +934,15 @@ export function DashboardClient({
         initialSecurityId={sizerParams?.securityId}
         initialBuyPrice={sizerParams?.buyPrice}
         initialStopLoss={sizerParams?.initialStopLoss}
-        onAccountEquityChange={handleSaveAccountValue}
+        onAccountEquityChange={handleAccountEquityChangeFromSizer}
       />
 
       <AccountEquityModal
         isOpen={isAccountModalOpen}
         onClose={() => setIsAccountModalOpen(false)}
-        currentAccountValue={currentTotalEquity}
-        anchorValue={anchorValue}
-        pnlSinceAnchor={pnlSinceAnchor}
-        anchorUpdatedAt={anchorUpdatedAt}
-        onSaveAccountValue={handleSaveAccountValue}
-        kpis={globalKpis}
+        cashBalance={cashBalance}
+        openExposureEur={displayedKpis.openExposureEur}
+        onSaveCashBalance={handleSaveCashBalance}
       />
     </div>
   );
