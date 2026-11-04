@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   Clock,
+  Trash2,
 } from "lucide-react";
 import type { ComputedTrade } from "@/lib/trade-math";
 import type {
@@ -40,6 +41,7 @@ interface TradeModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: NewTradeInput, tradeId?: number) => Promise<void>;
+  onDeleteTrade?: (trade: ComputedTrade) => Promise<void>;
   initialTrade?: ComputedTrade | null;
   preselectedSecurity?: SecurityRecord | null;
   initialSizing?: {
@@ -64,6 +66,7 @@ export function TradeModal({
   isOpen,
   onClose,
   onSubmit,
+  onDeleteTrade,
   initialTrade,
   preselectedSecurity,
   initialSizing,
@@ -649,264 +652,282 @@ export function TradeModal({
             </div>
           </div>
 
-            {/* Row 3: Dates, Exit/Current Price & Dual FX Rates */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  Start Date *
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
-                />
-              </div>
+          {/* Row 3: Dates, Exit/Current Price & Dual FX Rates */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Start Date *
+              </label>
+              <input
+                type="date"
+                required
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
+              />
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  End Date <span className="text-slate-400 font-normal">(Open)</span>
-                </label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
-                />
-              </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                End Date <span className="text-slate-400 font-normal">(Open)</span>
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
+              />
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  {endDate ? `Sell Price (${currency})` : `Latest Price (${currency})`}
-                </label>
-                {endDate ? (
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                {endDate ? `Sell Price (${currency})` : `Latest Price (${currency})`}
+              </label>
+              {endDate ? (
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="Exit price"
+                  value={sellPrice}
+                  onChange={(e) => setSellPrice(e.target.value)}
+                  className="w-full bg-white border border-emerald-400 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-emerald-600"
+                />
+              ) : (
+                <div className="space-y-1">
                   <input
                     type="number"
                     step="any"
-                    placeholder="Exit price"
-                    value={sellPrice}
-                    onChange={(e) => setSellPrice(e.target.value)}
-                    className="w-full bg-white border border-emerald-400 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-emerald-600"
+                    placeholder="Uses Security Quote"
+                    value={manualLatestPrice}
+                    onChange={(e) => setManualLatestPrice(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
                   />
-                ) : (
-                  <div className="space-y-1">
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder="Uses Security Quote"
-                      value={manualLatestPrice}
-                      onChange={(e) => setManualLatestPrice(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
+                  {initialTrade && initialTrade.lastQuoteAt && (
+                    (() => {
+                      const age = getQuoteAgeInfo(initialTrade.lastQuoteAt);
+                      return age.isDaysOld ? (
+                        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                          <span>
+                            Quote is {age.label} ({age.fullDate}) — Stale
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-slate-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          <span>Quote updated: {age.label}</span>
+                        </div>
+                      );
+                    })()
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Row 3b: Entry FX (Start Date) & Exit/Current FX (End Date / Live) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-600">
+                  Entry FX Rate to € <span className="text-slate-400 font-normal">({startDate || "Start"})</span>
+                </label>
+                {currency !== "EUR" && (
+                  <button
+                    type="button"
+                    disabled={fetchingEntryFx}
+                    onClick={handleFetchEntryHistoricalFx}
+                    title={`Fetch official ECB exchange rate for Start Date (${startDate || "latest"})`}
+                    className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <RefreshCw
+                      className={`w-2.5 h-2.5 ${fetchingEntryFx ? "animate-spin" : ""}`}
                     />
-                    {initialTrade && initialTrade.lastQuoteAt && (
-                      (() => {
-                        const age = getQuoteAgeInfo(initialTrade.lastQuoteAt);
-                        return age.isDaysOld ? (
-                          <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
-                            <span>
-                              Quote is {age.label} ({age.fullDate}) — Stale
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            <span>Quote updated: {age.label}</span>
-                          </div>
-                        );
-                      })()
-                    )}
-                  </div>
+                    ECB ({startDate || "Start"})
+                  </button>
                 )}
               </div>
+              <input
+                type="number"
+                step="any"
+                disabled={currency === "EUR"}
+                value={currency === "EUR" ? "1.0" : entryFxRateToEur}
+                onChange={(e) => setEntryFxRateToEur(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-blue-600"
+              />
             </div>
 
-            {/* Row 3b: Entry FX (Start Date) & Exit/Current FX (End Date / Live) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-600">
-                    Entry FX Rate to € <span className="text-slate-400 font-normal">({startDate || "Start"})</span>
-                  </label>
-                  {currency !== "EUR" && (
-                    <button
-                      type="button"
-                      disabled={fetchingEntryFx}
-                      onClick={handleFetchEntryHistoricalFx}
-                      title={`Fetch official ECB exchange rate for Start Date (${startDate || "latest"})`}
-                      className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <RefreshCw
-                        className={`w-2.5 h-2.5 ${fetchingEntryFx ? "animate-spin" : ""}`}
-                      />
-                      ECB ({startDate || "Start"})
-                    </button>
-                  )}
-                </div>
-                <input
-                  type="number"
-                  step="any"
-                  disabled={currency === "EUR"}
-                  value={currency === "EUR" ? "1.0" : entryFxRateToEur}
-                  onChange={(e) => setEntryFxRateToEur(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-blue-600"
-                />
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-600">
+                  {endDate ? "Exit FX Rate to €" : "Current FX Rate to €"}{" "}
+                  <span className="text-slate-400 font-normal">
+                    ({endDate ? endDate : "Live"})
+                  </span>
+                </label>
+                {currency !== "EUR" && (
+                  <button
+                    type="button"
+                    disabled={fetchingFx}
+                    onClick={handleFetchHistoricalFx}
+                    title={`Fetch official ECB exchange rate for ${endDate || "latest"}`}
+                    className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <RefreshCw
+                      className={`w-2.5 h-2.5 ${fetchingFx ? "animate-spin" : ""}`}
+                    />
+                    ECB ({endDate || "Latest"})
+                  </button>
+                )}
               </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-semibold text-slate-600">
-                    {endDate ? "Exit FX Rate to €" : "Current FX Rate to €"}{" "}
-                    <span className="text-slate-400 font-normal">
-                      ({endDate ? endDate : "Live"})
-                    </span>
-                  </label>
-                  {currency !== "EUR" && (
-                    <button
-                      type="button"
-                      disabled={fetchingFx}
-                      onClick={handleFetchHistoricalFx}
-                      title={`Fetch official ECB exchange rate for ${endDate || "latest"}`}
-                      className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <RefreshCw
-                        className={`w-2.5 h-2.5 ${fetchingFx ? "animate-spin" : ""}`}
-                      />
-                      ECB ({endDate || "Latest"})
-                    </button>
-                  )}
-                </div>
-                <input
-                  type="number"
-                  step="any"
-                  disabled={currency === "EUR"}
-                  value={currency === "EUR" ? "1.0" : fxRateToEur}
-                  onChange={(e) => setFxRateToEur(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-blue-600"
-                />
-              </div>
+              <input
+                type="number"
+                step="any"
+                disabled={currency === "EUR"}
+                value={currency === "EUR" ? "1.0" : fxRateToEur}
+                onChange={(e) => setFxRateToEur(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-blue-600"
+              />
             </div>
+          </div>
 
-            {/* Row 4: Trade Discipline Checkboxes */}
-            <div className="flex flex-wrap items-center gap-6 pt-1">
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={stopMoved}
-                  onChange={(e) => setStopMoved(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-slate-700 font-medium">
-                  Stop Moved to Breakeven / 2R (Done)
-                </span>
-              </label>
+          {/* Row 4: Trade Discipline Checkboxes */}
+          <div className="flex flex-wrap items-center gap-6 pt-1">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={stopMoved}
+                onChange={(e) => setStopMoved(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-slate-700 font-medium">
+                Stop Moved to Breakeven / 2R (Done)
+              </span>
+            </label>
 
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={trimmedAt2R}
-                  onChange={(e) => setTrimmedAt2R(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-sm text-slate-700 font-medium">
-                  Trimmed at 2R
-                </span>
-              </label>
-            </div>
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={trimmedAt2R}
+                onChange={(e) => setTrimmedAt2R(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <span className="text-sm text-slate-700 font-medium">
+                Trimmed at 2R
+              </span>
+            </label>
+          </div>
 
-            {/* Live Trade Math Preview Card */}
-            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs tabular-nums">
-              <div>
-                <div className="text-slate-400 font-medium uppercase text-[10px]">
-                  Entry Value (Start FX)
-                </div>
-                <div className="text-sm font-bold text-slate-900 mt-0.5">
-                  €
-                  {previewEntryEur.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  {currency}{" "}
-                  {previewEntryLocal.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </div>
+          {/* Live Trade Math Preview Card */}
+          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs tabular-nums">
+            <div>
+              <div className="text-slate-400 font-medium uppercase text-[10px]">
+                Entry Value (Start FX)
               </div>
-
-              <div>
-                <div className="text-slate-400 font-medium uppercase text-[10px]">
-                  Initial Risk %
-                </div>
-                <div
-                  className={`text-sm font-bold mt-0.5 ${previewRiskPct > 0.08 ? "text-rose-600" : "text-amber-600"
-                    }`}
-                >
-                  {(previewRiskPct * 100).toFixed(2)}%
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Disciplined limit: ≤ 6-7%
-                </div>
+              <div className="text-sm font-bold text-slate-900 mt-0.5">
+                €
+                {previewEntryEur.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </div>
-
-              <div>
-                <div className="text-slate-400 font-medium uppercase text-[10px]">
-                  Move Stop At (2R)
-                </div>
-                <div className="text-sm font-bold text-blue-600 mt-0.5">
-                  {currency} {previewMoveStopAt.toFixed(2)}
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  +{(previewRiskPct * 200).toFixed(1)}% target
-                </div>
-              </div>
-
-              <div>
-                <div className="text-slate-400 font-medium uppercase text-[10px]">
-                  Projected R / Net €
-                </div>
-                <div
-                  className={`text-sm font-bold mt-0.5 ${previewR >= 0 ? "text-emerald-600" : "text-rose-600"
-                    }`}
-                >
-                  {previewR >= 0 ? "+" : ""}
-                  {previewR.toFixed(2)}R
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  {previewGainEur >= 0 ? "+" : "-"}€
-                  {Math.abs(previewGainEur).toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  ({(previewGainPct * 100).toFixed(1)}%)
-                </div>
+              <div className="text-[11px] text-slate-500">
+                {currency}{" "}
+                {previewEntryLocal.toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+            <div>
+              <div className="text-slate-400 font-medium uppercase text-[10px]">
+                Initial Risk %
+              </div>
+              <div
+                className={`text-sm font-bold mt-0.5 ${previewRiskPct > 0.08 ? "text-rose-600" : "text-amber-600"
+                  }`}
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-5 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+                {(previewRiskPct * 100).toFixed(2)}%
+              </div>
+              <div className="text-[11px] text-slate-500">
+                Disciplined limit: ≤ 6-7%
+              </div>
+            </div>
+
+            <div>
+              <div className="text-slate-400 font-medium uppercase text-[10px]">
+                Move Stop At (2R)
+              </div>
+              <div className="text-sm font-bold text-blue-600 mt-0.5">
+                {currency} {previewMoveStopAt.toFixed(2)}
+              </div>
+              <div className="text-[11px] text-slate-500">
+                +{(previewRiskPct * 200).toFixed(1)}% target
+              </div>
+            </div>
+
+            <div>
+              <div className="text-slate-400 font-medium uppercase text-[10px]">
+                Projected R / Net €
+              </div>
+              <div
+                className={`text-sm font-bold mt-0.5 ${previewR >= 0 ? "text-emerald-600" : "text-rose-600"
+                  }`}
               >
-                {submitting
-                  ? "Saving..."
-                  : mode === "close"
-                    ? "Confirm Close Trade"
-                    : initialTrade
-                      ? "Save Changes"
-                      : "Add Trade"}
-              </button>
+                {previewR >= 0 ? "+" : ""}
+                {previewR.toFixed(2)}R
+              </div>
+              <div className="text-[11px] text-slate-500">
+                {previewGainEur >= 0 ? "+" : "-"}€
+                {Math.abs(previewGainEur).toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                ({(previewGainPct * 100).toFixed(1)}%)
+              </div>
+            </div>
+          </div>
+
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+              <div>
+                {initialTrade && onDeleteTrade && (
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={async () => {
+                      await onDeleteTrade(initialTrade);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete Trade</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {submitting
+                    ? "Saving..."
+                    : mode === "close"
+                      ? "Confirm Close Trade"
+                      : initialTrade
+                        ? "Save Changes"
+                        : "Add Trade"}
+                </button>
+              </div>
             </div>
         </form>
       </div>

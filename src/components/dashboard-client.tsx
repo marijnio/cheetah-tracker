@@ -276,6 +276,8 @@ export function DashboardClient({
     });
     if (res.ok) {
       applyServerPayload(await res.json());
+      setIsModalOpen(false);
+      setEditingTrade(null);
     }
   };
 
@@ -905,7 +907,6 @@ export function DashboardClient({
               securities={securities}
               onToggleField={handleToggleField}
               onEditTrade={handleOpenEdit}
-              onDeleteTrade={handleDeleteTrade}
               onUpdateQuote={async (secId, price, provider) => {
                 await handleUpdateSecurity(secId, {
                   latestPrice: price,
@@ -961,6 +962,7 @@ export function DashboardClient({
           setInitialSizing(null);
         }}
         onSubmit={handleSaveTrade}
+        onDeleteTrade={handleDeleteTrade}
         initialTrade={editingTrade}
         preselectedSecurity={preselectedSecurity}
         initialSizing={initialSizing}
