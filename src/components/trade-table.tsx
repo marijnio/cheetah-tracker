@@ -439,15 +439,15 @@ export function TradeTable({
                   <tr
                     key={trade.id}
                     className={`group transition-colors ${isOpen
-                        ? "bg-blue-50/25 hover:bg-blue-50/60"
-                        : "bg-white hover:bg-slate-50/90"
+                      ? "bg-blue-50/25 hover:bg-blue-50/60"
+                      : "bg-white hover:bg-slate-50/90"
                       }`}
                   >
                     {/* Two-Line Ticker + GICS Sector (Portfolio Dividend Tracker style) */}
                     <td
                       className={`py-3 pl-5 pr-4 whitespace-nowrap sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] ${isOpen
-                          ? "bg-[#f4f8fe] group-hover:bg-[#eaf1fc]"
-                          : "bg-white group-hover:bg-slate-50"
+                        ? "bg-[#f4f8fe] group-hover:bg-[#eaf1fc]"
+                        : "bg-white group-hover:bg-slate-50"
                         }`}
                     >
                       <div className="flex items-center gap-1.5">
@@ -526,8 +526,8 @@ export function TradeTable({
                             {dayChangePct !== null && (
                               <span
                                 className={`px-1.5 py-0.2 rounded text-[10px] font-semibold tabular-nums ${dayChangePct >= 0
-                                    ? "bg-emerald-50 text-emerald-600"
-                                    : "bg-rose-50 text-rose-500"
+                                  ? "bg-emerald-50 text-emerald-600"
+                                  : "bg-rose-50 text-rose-500"
                                   }`}
                                 title={`Today's 1D change vs previous close (${formatLocalPrice(
                                   previousClose,
@@ -568,8 +568,8 @@ export function TradeTable({
                                 >
                                   <RefreshCw
                                     className={`w-3 h-3 ${syncingSecurityId === linkedSecurity.id
-                                        ? "animate-spin text-blue-600"
-                                        : ""
+                                      ? "animate-spin text-blue-600"
+                                      : ""
                                       }`}
                                   />
                                 </button>
@@ -652,8 +652,8 @@ export function TradeTable({
                       </div>
                       <div
                         className={`text-[11px] ${trade.initialRiskPercent > 0.075
-                            ? "text-amber-600 font-medium"
-                            : "text-slate-400"
+                          ? "text-amber-600 font-medium"
+                          : "text-slate-400"
                           }`}
                       >
                         -{(trade.initialRiskPercent * 100).toFixed(1)}% risk
@@ -684,13 +684,14 @@ export function TradeTable({
                           trade.currency
                         )}/share)`}
                       >
-                      <span
+                        <span
+                      className={`px-2 py-0.5 rounded text-[11px] font-semibold tabular-nums ${isWinner
                           ? "bg-emerald-50 text-emerald-600"
                           : trade.gainLossPercent < 0
                             ? "bg-rose-50 text-rose-500"
                             : "bg-slate-100 text-slate-600"
-                      }`}
-                        >
+                        }`}
+                      >
                       {trade.gainLossPercent > 0 ? "+" : ""}
                       {(trade.gainLossPercent * 100).toFixed(2)}%
                     </span>
@@ -701,10 +702,10 @@ export function TradeTable({
           <td className="py-3 px-2.5 text-right whitespace-nowrap">
             <div
               className={`font-semibold ${trade.gainLossEur > 0
-                  ? "text-emerald-600"
-                  : trade.gainLossEur < 0
-                    ? "text-rose-500"
-                    : "text-slate-500"
+                ? "text-emerald-600"
+                : trade.gainLossEur < 0
+                  ? "text-rose-500"
+                  : "text-slate-500"
                 }`}
             >
               {formatEurValue(trade.gainLossEur, true)}
@@ -742,8 +743,8 @@ export function TradeTable({
               type="button"
               onClick={() => onToggleField(trade, "stopMoved")}
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${trade.stopMoved
-                  ? "bg-blue-50 text-blue-600"
-                  : "text-slate-300 hover:text-slate-500"
+                ? "bg-blue-50 text-blue-600"
+                : "text-slate-300 hover:text-slate-500"
                 }`}
               title="Toggle Stop Moved to Breakeven/2R"
             >
@@ -764,8 +765,8 @@ export function TradeTable({
               type="button"
               onClick={() => onToggleField(trade, "trimmedAt2R")}
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${trade.trimmedAt2R
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "text-slate-300 hover:text-slate-500"
+                ? "bg-emerald-50 text-emerald-700"
+                : "text-slate-300 hover:text-slate-500"
                 }`}
               title="Toggle Trimmed at 2R"
             >
