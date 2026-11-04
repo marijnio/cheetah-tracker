@@ -13,6 +13,7 @@ export interface ComputedTrade extends TradeRecord {
   gainLossPercent: number; // e.g., 0.187 for 18.7%
   gainLossLocal: number;
   gainLossEur: number;
+  entryRateToEur: number;
   rateToEur: number;
   rMultiple: number;
   moveStopAt: number; // 2R price level: Buy Price * (1 + 2 * Initial Risk %)
@@ -87,9 +88,15 @@ export function computeTradesWithMetrics(
     const isOpen = !trade.endDate;
     const currency = (trade.currency || "USD").toUpperCase();
 
-    // Determine active FX rate to EUR
+    // Determine Start Date (Entry) FX rate to EUR
+    const entryRateToEur =
+      currency === "EUR"
+        ? 1.0
+        : (trade.entryFxRateToEur ?? trade.fxRateToEur ?? 1.0);
+
+    // Determine End Date (Closed) or Live (Open) FX rate to EUR
     // For EUR trades, rate is always 1.0.
-    // For closed trades, use locked fxRateToEur.
+    // For closed trades, use locked fxRateToEur (End Date FX rate).
     // For open trades, use liveFxMap if available, fallback to trade.fxRateToEur.
     const rateToEur =
       currency === "EUR"
@@ -106,7 +113,7 @@ export function computeTradesWithMetrics(
       : (trade.sellPrice ?? trade.manualLatestPrice ?? trade.buyPrice);
 
     const entryValueLocal = trade.shares * trade.buyPrice;
-    const entryValueEur = entryValueLocal * rateToEur;
+    const entryValueEur = entryValueLocal * entryRateToEur;
 
     const latestValueLocal = trade.shares * latestPrice;
     const latestValueEur = latestValueLocal * rateToEur;
@@ -117,7 +124,7 @@ export function computeTradesWithMetrics(
     const tradingDaysHeld = calculateTradingDaysHeld(trade.startDate, trade.endDate, referenceToday);
 
     const gainLossLocal = latestValueLocal - entryValueLocal;
-    const gainLossEur = gainLossLocal * rateToEur;
+    const gainLossEur = latestValueEur - entryValueEur;
     const gainLossPercent = trade.buyPrice > 0 ? (latestPrice - trade.buyPrice) / trade.buyPrice : 0;
 
     // R-Multiple = Gain/Loss % / Initial Risk %
@@ -148,6 +155,7 @@ export function computeTradesWithMetrics(
       gainLossPercent,
       gainLossLocal,
       gainLossEur,
+      entryRateToEur,
       rateToEur,
       rMultiple,
       moveStopAt,

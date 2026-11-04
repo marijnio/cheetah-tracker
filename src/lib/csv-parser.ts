@@ -75,6 +75,11 @@ export function parseTradesCsv(csvContent: string): NewTradeInput[] {
   const idxCurrency = colIdx(["currency", "ccy"]);
   const idxStopLoss = colIdx(["initial stop loss", "stop loss", "initial stop"]);
   const idxLatestPrice = colIdx(["latest price", "current price"]);
+  const idxEntryRateToEur = colIdx([
+    "rate to € at start",
+    "rate to eur at start",
+    "entry fx rate",
+  ]);
   const idxRateToEur = colIdx(["rate to € at end", "rate to eur at end", "fx rate"]);
   const idxStopMoved = colIdx(["stop moved"]);
   const idxTrimmed = colIdx(["trimmed at 2r", "trimmed"]);
@@ -121,18 +126,18 @@ export function parseTradesCsv(csvContent: string): NewTradeInput[] {
       sellPrice = latestPriceFromSheet;
     }
 
-    // Parse FX Rate to EUR, healing #N/A values automatically
+    const entryLocal = parseNumber(
+      idxEntryValueLocal !== -1 ? row[idxEntryValueLocal] : null
+    );
+    const entryEur = parseNumber(
+      idxEntryValueEur !== -1 ? row[idxEntryValueEur] : null
+    );
+
+    // Parse End/Latest FX Rate to EUR, healing #N/A values automatically
     let fxRateToEur = parseNumber(idxRateToEur !== -1 ? row[idxRateToEur] : null);
     if (currency === "EUR") {
       fxRateToEur = 1.0;
     } else if (fxRateToEur === null || fxRateToEur <= 0) {
-      // Try deriving from Entry Value € / Entry Value if present in sheet
-      const entryLocal = parseNumber(
-        idxEntryValueLocal !== -1 ? row[idxEntryValueLocal] : null
-      );
-      const entryEur = parseNumber(
-        idxEntryValueEur !== -1 ? row[idxEntryValueEur] : null
-      );
       const dateKey = endDate ? `${currency}:${endDate}` : currency;
 
       if (HISTORICAL_FX_FALLBACKS[dateKey]) {
@@ -141,6 +146,23 @@ export function parseTradesCsv(csvContent: string): NewTradeInput[] {
         fxRateToEur = Number((entryEur / entryLocal).toFixed(6));
       } else {
         fxRateToEur = HISTORICAL_FX_FALLBACKS[currency] ?? 1.0;
+      }
+    }
+
+    // Parse Start Date (Entry) FX Rate to EUR
+    let entryFxRateToEur = parseNumber(
+      idxEntryRateToEur !== -1 ? row[idxEntryRateToEur] : null
+    );
+    if (currency === "EUR") {
+      entryFxRateToEur = 1.0;
+    } else if (entryFxRateToEur === null || entryFxRateToEur <= 0) {
+      const startDateKey = `${currency}:${startDate}`;
+      if (entryLocal && entryEur && entryLocal > 0) {
+        entryFxRateToEur = Number((entryEur / entryLocal).toFixed(6));
+      } else if (HISTORICAL_FX_FALLBACKS[startDateKey]) {
+        entryFxRateToEur = HISTORICAL_FX_FALLBACKS[startDateKey];
+      } else {
+        entryFxRateToEur = HISTORICAL_FX_FALLBACKS[currency] ?? fxRateToEur ?? 1.0;
       }
     }
 
@@ -173,6 +195,7 @@ export function parseTradesCsv(csvContent: string): NewTradeInput[] {
       stopMoved,
       trimmedAt2R,
       manualLatestPrice: !endDate ? latestPriceFromSheet : null,
+      entryFxRateToEur,
       fxRateToEur,
       notes: null,
     });

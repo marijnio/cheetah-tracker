@@ -103,7 +103,7 @@ const globalForDb = globalThis as unknown as {
   initializedVersion: number | undefined;
 };
 
-const CURRENT_DB_INIT_VERSION = 3;
+const CURRENT_DB_INIT_VERSION = 4;
 
 function getDatabasePath(): string {
   if (process.env.DATABASE_URL) {
@@ -149,6 +149,14 @@ function ensureSchemaAndSeed(db: DatabaseSync): void {
   db.exec(
     "CREATE INDEX IF NOT EXISTS idx_trades_security_id ON trades(security_id);"
   );
+
+  // Version 4 Migration: Add entry_fx_rate_to_eur column (Start Date FX rate)
+  const hasEntryFxRate = tradeCols.some(
+    (c) => c.name === "entry_fx_rate_to_eur"
+  );
+  if (!hasEntryFxRate) {
+    db.exec("ALTER TABLE trades ADD COLUMN entry_fx_rate_to_eur REAL;");
+  }
 
   // Version 3 Migration: Migrate to single unified ticker
   const secCols = db
@@ -219,7 +227,54 @@ function ensureSchemaAndSeed(db: DatabaseSync): void {
     }
   }
 
-  // 3. Backfill / sync Securities from existing trades and link trades.security_id
+  // 3. Backfill entry_fx_rate_to_eur for existing rows where missing
+  const nullEntryFxCount = db
+    .prepare(
+      "SELECT COUNT(*) as cnt FROM trades WHERE entry_fx_rate_to_eur IS NULL"
+    )
+    .get() as { cnt: number };
+  if (nullEntryFxCount && nullEntryFxCount.cnt > 0) {
+    const sampleCsvPath = path.join(
+      process.cwd(),
+      "sample-data",
+      "sample-trades.csv"
+    );
+    if (fs.existsSync(sampleCsvPath)) {
+      try {
+        const csvContent = fs.readFileSync(sampleCsvPath, "utf-8");
+        const parsedTrades = parseTradesCsv(csvContent);
+        const updateEntryFxStmt = db.prepare(`
+          UPDATE trades
+          SET entry_fx_rate_to_eur = ?
+          WHERE entry_fx_rate_to_eur IS NULL
+            AND ticker = ?
+            AND start_date = ?
+            AND ABS(shares - ?) < 0.0001
+            AND ABS(buy_price - ?) < 0.0001
+        `);
+        for (const pt of parsedTrades) {
+          if (pt.entryFxRateToEur !== undefined) {
+            updateEntryFxStmt.run(
+              pt.entryFxRateToEur,
+              pt.ticker,
+              pt.startDate,
+              pt.shares,
+              pt.buyPrice
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Failed to backfill entry FX from sample CSV:", err);
+      }
+    }
+    db.exec(`
+      UPDATE trades
+      SET entry_fx_rate_to_eur = CASE WHEN currency = 'EUR' THEN 1.0 ELSE fx_rate_to_eur END
+      WHERE entry_fx_rate_to_eur IS NULL;
+    `);
+  }
+
+  // 4. Backfill / sync Securities from existing trades and link trades.security_id
   syncSecuritiesFromTrades(db);
 }
 
@@ -942,6 +997,7 @@ interface RawTradeRow {
   stop_moved: number;
   trimmed_at_2r: number;
   manual_latest_price: number | null;
+  entry_fx_rate_to_eur: number | null;
   fx_rate_to_eur: number;
   notes: string | null;
   created_at: string;
@@ -949,6 +1005,10 @@ interface RawTradeRow {
 }
 
 function mapRowToTrade(row: RawTradeRow): TradeRecord {
+  const ccy = (row.currency || "USD").toUpperCase();
+  const exitFx = ccy === "EUR" ? 1.0 : row.fx_rate_to_eur;
+  const entryFx =
+    ccy === "EUR" ? 1.0 : (row.entry_fx_rate_to_eur ?? row.fx_rate_to_eur);
   return {
     id: row.id,
     securityId: row.security_id,
@@ -966,7 +1026,8 @@ function mapRowToTrade(row: RawTradeRow): TradeRecord {
     stopMoved: Boolean(row.stop_moved),
     trimmedAt2R: Boolean(row.trimmed_at_2r),
     manualLatestPrice: row.manual_latest_price,
-    fxRateToEur: row.fx_rate_to_eur,
+    entryFxRateToEur: entryFx,
+    fxRateToEur: exitFx,
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1044,6 +1105,10 @@ export function createTrade(input: NewTradeInput): TradeRecord {
     currency === "EUR"
       ? 1.0
       : (input.fxRateToEur ?? getLiveFxMap()[currency] ?? getDefaultFxToEur(currency));
+  const entryFxRate =
+    currency === "EUR"
+      ? 1.0
+      : (input.entryFxRateToEur ?? fxRate);
 
   const tradeCols = db
     .prepare("PRAGMA table_info(trades)")
@@ -1055,17 +1120,17 @@ export function createTrade(input: NewTradeInput): TradeRecord {
         INSERT INTO trades (
           security_id, ticker, yahoo_ticker, gics_sector, start_date, end_date,
           shares, buy_price, sell_price, currency, initial_stop_loss,
-          stop_moved, trimmed_at_2r, manual_latest_price, fx_rate_to_eur,
+          stop_moved, trimmed_at_2r, manual_latest_price, entry_fx_rate_to_eur, fx_rate_to_eur,
           notes, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
     : db.prepare(`
         INSERT INTO trades (
           security_id, ticker, gics_sector, start_date, end_date,
           shares, buy_price, sell_price, currency, initial_stop_loss,
-          stop_moved, trimmed_at_2r, manual_latest_price, fx_rate_to_eur,
+          stop_moved, trimmed_at_2r, manual_latest_price, entry_fx_rate_to_eur, fx_rate_to_eur,
           notes, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
   const result = hasYahooTicker
@@ -1084,6 +1149,7 @@ export function createTrade(input: NewTradeInput): TradeRecord {
       input.stopMoved ? 1 : 0,
       input.trimmedAt2R ? 1 : 0,
       input.manualLatestPrice ?? null,
+      entryFxRate,
       fxRate,
       input.notes ?? null,
       now,
@@ -1103,6 +1169,7 @@ export function createTrade(input: NewTradeInput): TradeRecord {
       input.stopMoved ? 1 : 0,
       input.trimmedAt2R ? 1 : 0,
       input.manualLatestPrice ?? null,
+      entryFxRate,
       fxRate,
       input.notes ?? null,
       now,
@@ -1174,6 +1241,12 @@ export function updateTrade(
       : updates.fxRateToEur !== undefined
         ? updates.fxRateToEur
         : existing.fxRateToEur;
+  const nextEntryFxRate =
+    nextCurrency === "EUR"
+      ? 1.0
+      : updates.entryFxRateToEur !== undefined
+        ? updates.entryFxRateToEur
+        : existing.entryFxRateToEur;
 
   const tradeCols = db
     .prepare("PRAGMA table_info(trades)")
@@ -1197,6 +1270,7 @@ export function updateTrade(
           stop_moved = ?,
           trimmed_at_2r = ?,
           manual_latest_price = ?,
+          entry_fx_rate_to_eur = ?,
           fx_rate_to_eur = ?,
           notes = ?,
           updated_at = ?
@@ -1217,6 +1291,7 @@ export function updateTrade(
           stop_moved = ?,
           trimmed_at_2r = ?,
           manual_latest_price = ?,
+          entry_fx_rate_to_eur = ?,
           fx_rate_to_eur = ?,
           notes = ?,
           updated_at = ?
@@ -1247,6 +1322,7 @@ export function updateTrade(
         ? 1
         : 0,
       nextManualLatest ?? null,
+      nextEntryFxRate,
       nextFxRate,
       updates.notes !== undefined ? updates.notes : existing.notes,
       now,
@@ -1275,6 +1351,7 @@ export function updateTrade(
         ? 1
         : 0,
       nextManualLatest ?? null,
+      nextEntryFxRate,
       nextFxRate,
       updates.notes !== undefined ? updates.notes : existing.notes,
       now,
@@ -1315,17 +1392,17 @@ export function bulkInsertTrades(
           INSERT INTO trades (
             security_id, ticker, yahoo_ticker, gics_sector, start_date, end_date,
             shares, buy_price, sell_price, currency, initial_stop_loss,
-            stop_moved, trimmed_at_2r, manual_latest_price, fx_rate_to_eur,
+            stop_moved, trimmed_at_2r, manual_latest_price, entry_fx_rate_to_eur, fx_rate_to_eur,
             notes, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
       : db.prepare(`
           INSERT INTO trades (
             security_id, ticker, gics_sector, start_date, end_date,
             shares, buy_price, sell_price, currency, initial_stop_loss,
-            stop_moved, trimmed_at_2r, manual_latest_price, fx_rate_to_eur,
+            stop_moved, trimmed_at_2r, manual_latest_price, entry_fx_rate_to_eur, fx_rate_to_eur,
             notes, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
     for (const item of items) {
@@ -1338,6 +1415,10 @@ export function bulkInsertTrades(
         currency === "EUR"
           ? 1.0
           : (item.fxRateToEur ?? getDefaultFxToEur(currency));
+      const entryFxRate =
+        currency === "EUR"
+          ? 1.0
+          : (item.entryFxRateToEur ?? fxRate);
 
       if (hasYahooTicker) {
         stmt.run(
@@ -1355,6 +1436,7 @@ export function bulkInsertTrades(
           item.stopMoved ? 1 : 0,
           item.trimmedAt2R ? 1 : 0,
           item.manualLatestPrice ?? null,
+          entryFxRate,
           fxRate,
           item.notes ?? null,
           now,
@@ -1375,6 +1457,7 @@ export function bulkInsertTrades(
           item.stopMoved ? 1 : 0,
           item.trimmedAt2R ? 1 : 0,
           item.manualLatestPrice ?? null,
+          entryFxRate,
           fxRate,
           item.notes ?? null,
           now,

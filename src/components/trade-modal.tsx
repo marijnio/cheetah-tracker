@@ -86,11 +86,13 @@ export function TradeModal({
   const [sellPrice, setSellPrice] = useState("");
   const [initialStopLoss, setInitialStopLoss] = useState("");
   const [manualLatestPrice, setManualLatestPrice] = useState("");
+  const [entryFxRateToEur, setEntryFxRateToEur] = useState("0.89338");
   const [fxRateToEur, setFxRateToEur] = useState("0.89338");
   const [stopMoved, setStopMoved] = useState(false);
   const [trimmedAt2R, setTrimmedAt2R] = useState(false);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [fetchingEntryFx, setFetchingEntryFx] = useState(false);
   const [fetchingFx, setFetchingFx] = useState(false);
   const [lookingUpYahoo, setLookingUpYahoo] = useState(false);
 
@@ -132,7 +134,22 @@ export function TradeModal({
           ? String(initialTrade.manualLatestPrice)
           : ""
       );
-      setFxRateToEur(String(initialTrade.fxRateToEur ?? 1.0));
+      setEntryFxRateToEur(
+        String(
+          initialTrade.entryFxRateToEur ??
+          initialTrade.entryRateToEur ??
+          initialTrade.fxRateToEur ??
+          1.0
+        )
+      );
+      setFxRateToEur(
+        String(
+          mode === "close" && !initialTrade.endDate
+            ? initialTrade.rateToEur ??
+            getFxRateForCurrency(initialTrade.currency || "USD")
+            : initialTrade.fxRateToEur ?? 1.0
+        )
+      );
       setStopMoved(initialTrade.stopMoved);
       setTrimmedAt2R(initialTrade.trimmedAt2R);
       setNotes(initialTrade.notes || "");
@@ -141,11 +158,15 @@ export function TradeModal({
         ? securities.find((s) => s.id === initialSizing.securityId)
         : null;
       if (sec) {
+        const rateStr = String(
+          initialSizing.fxRateToEur ?? getFxRateForCurrency(sec.currency)
+        );
         setSelectedSecurityId(String(sec.id));
         setTicker(sec.ticker);
         setGicsSector(sec.gicsSector);
         setCurrency(sec.currency);
-        setFxRateToEur(String(getFxRateForCurrency(sec.currency)));
+        setEntryFxRateToEur(rateStr);
+        setFxRateToEur(rateStr);
       }
       setStartDate(new Date().toISOString().slice(0, 10));
       setEndDate("");
@@ -162,6 +183,7 @@ export function TradeModal({
       setTrimmedAt2R(false);
       setNotes("");
     } else if (preselectedSecurity) {
+      const rateStr = String(getFxRateForCurrency(preselectedSecurity.currency));
       setSelectedSecurityId(String(preselectedSecurity.id));
       setTicker(preselectedSecurity.ticker);
       setGicsSector(preselectedSecurity.gicsSector);
@@ -181,13 +203,15 @@ export function TradeModal({
           : ""
       );
       setManualLatestPrice(priceStr);
-      setFxRateToEur(String(getFxRateForCurrency(preselectedSecurity.currency)));
+      setEntryFxRateToEur(rateStr);
+      setFxRateToEur(rateStr);
       setStopMoved(false);
       setTrimmedAt2R(false);
       setNotes("");
     } else {
       const firstSec = securities[0];
       if (firstSec) {
+        const rateStr = String(getFxRateForCurrency(firstSec.currency));
         setSelectedSecurityId(String(firstSec.id));
         setTicker(firstSec.ticker);
         setGicsSector(firstSec.gicsSector);
@@ -202,7 +226,8 @@ export function TradeModal({
           firstSec.latestPrice ? (firstSec.latestPrice * 0.94).toFixed(2) : ""
         );
         setManualLatestPrice(priceStr);
-        setFxRateToEur(String(getFxRateForCurrency(firstSec.currency)));
+        setEntryFxRateToEur(rateStr);
+        setFxRateToEur(rateStr);
       } else {
         setSelectedSecurityId("");
         setTicker("");
@@ -215,6 +240,7 @@ export function TradeModal({
         setSellPrice("");
         setInitialStopLoss("");
         setManualLatestPrice("");
+        setEntryFxRateToEur("1.0");
         setFxRateToEur("1.0");
       }
       setStopMoved(false);
@@ -231,10 +257,12 @@ export function TradeModal({
     if (!val) return;
     const sec = securities.find((s) => String(s.id) === val);
     if (sec) {
+      const rateStr = String(getFxRateForCurrency(sec.currency));
       setTicker(sec.ticker);
       setGicsSector(sec.gicsSector);
       setCurrency(sec.currency);
-      setFxRateToEur(String(getFxRateForCurrency(sec.currency)));
+      setEntryFxRateToEur(rateStr);
+      setFxRateToEur(rateStr);
       if (!initialTrade && sec.latestPrice !== null) {
         setBuyPrice(String(sec.latestPrice));
         setInitialStopLoss((sec.latestPrice * 0.94).toFixed(2));
@@ -249,10 +277,12 @@ export function TradeModal({
       (s) => s.ticker.toUpperCase() === val.trim().toUpperCase()
     );
     if (exactMatch) {
+      const rateStr = String(getFxRateForCurrency(exactMatch.currency));
       setSelectedSecurityId(String(exactMatch.id));
       setGicsSector(exactMatch.gicsSector);
       setCurrency(exactMatch.currency);
-      setFxRateToEur(String(getFxRateForCurrency(exactMatch.currency)));
+      setEntryFxRateToEur(rateStr);
+      setFxRateToEur(rateStr);
       return;
     }
 
@@ -260,15 +290,19 @@ export function TradeModal({
     if (val.includes(":") || val.toUpperCase() === "VWS") {
       const mapped = mapToYahooTicker(val);
       if (mapped.inferredCurrency && mapped.inferredCurrency !== currency) {
+        const rateStr = String(getFxRateForCurrency(mapped.inferredCurrency));
         setCurrency(mapped.inferredCurrency);
-        setFxRateToEur(String(getFxRateForCurrency(mapped.inferredCurrency)));
+        setEntryFxRateToEur(rateStr);
+        setFxRateToEur(rateStr);
       }
     }
   };
 
   const handleCurrencyChange = (nextCcy: string) => {
+    const rateStr = String(getFxRateForCurrency(nextCcy));
     setCurrency(nextCcy);
-    setFxRateToEur(String(getFxRateForCurrency(nextCcy)));
+    setEntryFxRateToEur(rateStr);
+    setFxRateToEur(rateStr);
   };
 
   const handleLookupTickerOnYahoo = async () => {
@@ -287,8 +321,10 @@ export function TradeModal({
           setGicsSector(info.gicsSector);
         }
         if (info.currency) {
+          const rateStr = String(getFxRateForCurrency(info.currency));
           setCurrency(info.currency);
-          setFxRateToEur(String(getFxRateForCurrency(info.currency)));
+          setEntryFxRateToEur(rateStr);
+          setFxRateToEur(rateStr);
         }
         if (info.latestPrice) {
           if (!buyPrice) {
@@ -300,6 +336,29 @@ export function TradeModal({
       }
     } finally {
       setLookingUpYahoo(false);
+    }
+  };
+
+  const handleFetchEntryHistoricalFx = async () => {
+    if (currency === "EUR") return;
+    setFetchingEntryFx(true);
+    try {
+      const res = await fetch("/api/quotes/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lookupHistoricalFx: {
+            fromCurrency: currency,
+            date: startDate || "latest",
+          },
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.rateToEur) {
+        setEntryFxRateToEur(String(data.rateToEur));
+      }
+    } finally {
+      setFetchingEntryFx(false);
     }
   };
 
@@ -339,10 +398,15 @@ export function TradeModal({
   const numStop = Number(initialStopLoss) || 0;
   const numSellOrLatest =
     Number(sellPrice) || Number(manualLatestPrice) || numBuy;
+  const numEntryFx =
+    currency === "EUR" ? 1.0 : Number(entryFxRateToEur) || Number(fxRateToEur) || 1.0;
   const numFx = currency === "EUR" ? 1.0 : Number(fxRateToEur) || 1.0;
 
   const previewEntryLocal = numShares * numBuy;
-  const previewEntryEur = previewEntryLocal * numFx;
+  const previewEntryEur = previewEntryLocal * numEntryFx;
+  const previewLatestLocal = numShares * numSellOrLatest;
+  const previewLatestEur = previewLatestLocal * numFx;
+  const previewGainEur = previewLatestEur - previewEntryEur;
   const previewRiskPct =
     numBuy > 0 && numStop > 0 ? (numBuy - numStop) / numBuy : 0;
   const previewMoveStopAt = numBuy * (1 + 2 * previewRiskPct);
@@ -366,6 +430,13 @@ export function TradeModal({
         ticker.trim()
       ).toUpperCase();
 
+      const resolvedExitFx =
+        currency === "EUR" ? 1.0 : Number(fxRateToEur) || 1.0;
+      const resolvedEntryFx =
+        currency === "EUR"
+          ? 1.0
+          : Number(entryFxRateToEur) || resolvedExitFx;
+
       await onSubmit(
         {
           securityId: selectedSec ? selectedSec.id : null,
@@ -380,7 +451,8 @@ export function TradeModal({
           initialStopLoss: Number(initialStopLoss),
           manualLatestPrice:
             manualLatestPrice.trim() !== "" ? Number(manualLatestPrice) : null,
-          fxRateToEur: currency === "EUR" ? 1.0 : Number(fxRateToEur) || 1.0,
+          entryFxRateToEur: resolvedEntryFx,
+          fxRateToEur: resolvedExitFx,
           stopMoved,
           trimmedAt2R,
           notes: notes.trim() || null,
@@ -577,225 +649,265 @@ export function TradeModal({
             </div>
           </div>
 
-          {/* Row 3: Dates & Exit / Current Price */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                Start Date *
-              </label>
-              <input
-                type="date"
-                required
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                End Date <span className="text-slate-400 font-normal">(Open)</span>
-              </label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                {endDate ? `Sell Price (${currency})` : `Latest Price (${currency})`}
-              </label>
-              {endDate ? (
+            {/* Row 3: Dates, Exit/Current Price & Dual FX Rates */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Start Date *
+                </label>
                 <input
-                  type="number"
-                  step="any"
-                  placeholder="Exit price"
-                  value={sellPrice}
-                  onChange={(e) => setSellPrice(e.target.value)}
-                  className="w-full bg-white border border-emerald-400 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-emerald-600"
+                  type="date"
+                  required
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
                 />
-              ) : (
-                <div className="space-y-1">
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  End Date <span className="text-slate-400 font-normal">(Open)</span>
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  {endDate ? `Sell Price (${currency})` : `Latest Price (${currency})`}
+                </label>
+                {endDate ? (
                   <input
                     type="number"
                     step="any"
-                    placeholder="Uses Security Quote"
-                    value={manualLatestPrice}
-                    onChange={(e) => setManualLatestPrice(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
+                    placeholder="Exit price"
+                    value={sellPrice}
+                    onChange={(e) => setSellPrice(e.target.value)}
+                    className="w-full bg-white border border-emerald-400 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-emerald-600"
                   />
-                  {initialTrade && initialTrade.lastQuoteAt && (
-                    (() => {
-                      const age = getQuoteAgeInfo(initialTrade.lastQuoteAt);
-                      return age.isDaysOld ? (
-                        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
-                          <span>
-                            Quote is {age.label} ({age.fullDate}) — Stale
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          <span>Quote updated: {age.label}</span>
-                        </div>
-                      );
-                    })()
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-slate-600">
-                  Rate to € {endDate ? "(End)" : "(Live)"}
-                </label>
-                {currency !== "EUR" && (
-                  <button
-                    type="button"
-                    disabled={fetchingFx}
-                    onClick={handleFetchHistoricalFx}
-                    title="Fetch official ECB exchange rate via Frankfurter"
-                    className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
-                  >
-                    <RefreshCw
-                      className={`w-2.5 h-2.5 ${fetchingFx ? "animate-spin" : ""
-                        }`}
+                ) : (
+                  <div className="space-y-1">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Uses Security Quote"
+                      value={manualLatestPrice}
+                      onChange={(e) => setManualLatestPrice(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
                     />
-                    ECB
-                  </button>
+                    {initialTrade && initialTrade.lastQuoteAt && (
+                      (() => {
+                        const age = getQuoteAgeInfo(initialTrade.lastQuoteAt);
+                        return age.isDaysOld ? (
+                          <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                            <span>
+                              Quote is {age.label} ({age.fullDate}) — Stale
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>Quote updated: {age.label}</span>
+                          </div>
+                        );
+                      })()
+                    )}
+                  </div>
                 )}
               </div>
-              <input
-                type="number"
-                step="any"
-                disabled={currency === "EUR"}
-                value={currency === "EUR" ? "1.0" : fxRateToEur}
-                onChange={(e) => setFxRateToEur(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-blue-600"
-              />
-            </div>
-          </div>
-
-          {/* Row 4: Trade Discipline Checkboxes */}
-          <div className="flex flex-wrap items-center gap-6 pt-1">
-            <label className="flex items-center gap-2.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={stopMoved}
-                onChange={(e) => setStopMoved(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-sm text-slate-700 font-medium">
-                Stop Moved to Breakeven / 2R (Done)
-              </span>
-            </label>
-
-            <label className="flex items-center gap-2.5 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={trimmedAt2R}
-                onChange={(e) => setTrimmedAt2R(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-              />
-              <span className="text-sm text-slate-700 font-medium">
-                Trimmed at 2R
-              </span>
-            </label>
-          </div>
-
-          {/* Live Trade Math Preview Card */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs tabular-nums">
-            <div>
-              <div className="text-slate-400 font-medium uppercase text-[10px]">
-                Entry Value
-              </div>
-              <div className="text-sm font-bold text-slate-900 mt-0.5">
-                €
-                {previewEntryEur.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </div>
-              <div className="text-[11px] text-slate-500">
-                {currency}{" "}
-                {previewEntryLocal.toLocaleString("en-US", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </div>
             </div>
 
-            <div>
-              <div className="text-slate-400 font-medium uppercase text-[10px]">
-                Initial Risk %
+            {/* Row 3b: Entry FX (Start Date) & Exit/Current FX (End Date / Live) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-600">
+                    Entry FX Rate to € <span className="text-slate-400 font-normal">({startDate || "Start"})</span>
+                  </label>
+                  {currency !== "EUR" && (
+                    <button
+                      type="button"
+                      disabled={fetchingEntryFx}
+                      onClick={handleFetchEntryHistoricalFx}
+                      title={`Fetch official ECB exchange rate for Start Date (${startDate || "latest"})`}
+                      className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <RefreshCw
+                        className={`w-2.5 h-2.5 ${fetchingEntryFx ? "animate-spin" : ""}`}
+                      />
+                      ECB ({startDate || "Start"})
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  disabled={currency === "EUR"}
+                  value={currency === "EUR" ? "1.0" : entryFxRateToEur}
+                  onChange={(e) => setEntryFxRateToEur(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-blue-600"
+                />
               </div>
-              <div
-                className={`text-sm font-bold mt-0.5 ${previewRiskPct > 0.08 ? "text-rose-600" : "text-amber-600"
-                  }`}
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-600">
+                    {endDate ? "Exit FX Rate to €" : "Current FX Rate to €"}{" "}
+                    <span className="text-slate-400 font-normal">
+                      ({endDate ? endDate : "Live"})
+                    </span>
+                  </label>
+                  {currency !== "EUR" && (
+                    <button
+                      type="button"
+                      disabled={fetchingFx}
+                      onClick={handleFetchHistoricalFx}
+                      title={`Fetch official ECB exchange rate for ${endDate || "latest"}`}
+                      className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <RefreshCw
+                        className={`w-2.5 h-2.5 ${fetchingFx ? "animate-spin" : ""}`}
+                      />
+                      ECB ({endDate || "Latest"})
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  disabled={currency === "EUR"}
+                  value={currency === "EUR" ? "1.0" : fxRateToEur}
+                  onChange={(e) => setFxRateToEur(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-blue-600"
+                />
+              </div>
+            </div>
+
+            {/* Row 4: Trade Discipline Checkboxes */}
+            <div className="flex flex-wrap items-center gap-6 pt-1">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={stopMoved}
+                  onChange={(e) => setStopMoved(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-slate-700 font-medium">
+                  Stop Moved to Breakeven / 2R (Done)
+                </span>
+              </label>
+
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={trimmedAt2R}
+                  onChange={(e) => setTrimmedAt2R(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span className="text-sm text-slate-700 font-medium">
+                  Trimmed at 2R
+                </span>
+              </label>
+            </div>
+
+            {/* Live Trade Math Preview Card */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs tabular-nums">
+              <div>
+                <div className="text-slate-400 font-medium uppercase text-[10px]">
+                  Entry Value (Start FX)
+                </div>
+                <div className="text-sm font-bold text-slate-900 mt-0.5">
+                  €
+                  {previewEntryEur.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {currency}{" "}
+                  {previewEntryLocal.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-slate-400 font-medium uppercase text-[10px]">
+                  Initial Risk %
+                </div>
+                <div
+                  className={`text-sm font-bold mt-0.5 ${previewRiskPct > 0.08 ? "text-rose-600" : "text-amber-600"
+                    }`}
+                >
+                  {(previewRiskPct * 100).toFixed(2)}%
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  Disciplined limit: ≤ 6-7%
+                </div>
+              </div>
+
+              <div>
+                <div className="text-slate-400 font-medium uppercase text-[10px]">
+                  Move Stop At (2R)
+                </div>
+                <div className="text-sm font-bold text-blue-600 mt-0.5">
+                  {currency} {previewMoveStopAt.toFixed(2)}
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  +{(previewRiskPct * 200).toFixed(1)}% target
+                </div>
+              </div>
+
+              <div>
+                <div className="text-slate-400 font-medium uppercase text-[10px]">
+                  Projected R / Net €
+                </div>
+                <div
+                  className={`text-sm font-bold mt-0.5 ${previewR >= 0 ? "text-emerald-600" : "text-rose-600"
+                    }`}
+                >
+                  {previewR >= 0 ? "+" : ""}
+                  {previewR.toFixed(2)}R
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {previewGainEur >= 0 ? "+" : "-"}€
+                  {Math.abs(previewGainEur).toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  ({(previewGainPct * 100).toFixed(1)}%)
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                {(previewRiskPct * 100).toFixed(2)}%
-              </div>
-              <div className="text-[11px] text-slate-500">
-                Disciplined limit: ≤ 6-7%
-              </div>
-            </div>
-
-            <div>
-              <div className="text-slate-400 font-medium uppercase text-[10px]">
-                Move Stop At (2R)
-              </div>
-              <div className="text-sm font-bold text-blue-600 mt-0.5">
-                {currency} {previewMoveStopAt.toFixed(2)}
-              </div>
-              <div className="text-[11px] text-slate-500">
-                +{(previewRiskPct * 200).toFixed(1)}% target
-              </div>
-            </div>
-
-            <div>
-              <div className="text-slate-400 font-medium uppercase text-[10px]">
-                Projected R-Multiple
-              </div>
-              <div
-                className={`text-sm font-bold mt-0.5 ${previewR >= 0 ? "text-emerald-600" : "text-rose-600"
-                  }`}
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-5 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
               >
-                {previewR >= 0 ? "+" : ""}
-                {previewR.toFixed(2)}R
-              </div>
-              <div className="text-[11px] text-slate-500">
-                {(previewGainPct * 100).toFixed(2)}% Gain/Loss
-              </div>
+                {submitting
+                  ? "Saving..."
+                  : mode === "close"
+                    ? "Confirm Close Trade"
+                    : initialTrade
+                      ? "Save Changes"
+                      : "Add Trade"}
+              </button>
             </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-5 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              {submitting
-                ? "Saving..."
-                : mode === "close"
-                  ? "Confirm Close Trade"
-                  : initialTrade
-                    ? "Save Changes"
-                    : "Add Trade"}
-            </button>
-          </div>
         </form>
       </div>
     </div>

@@ -87,6 +87,7 @@ export interface TradeRecord {
   trimmedAt2R: boolean;
 
   manualLatestPrice: number | null;
+  entryFxRateToEur: number; // Locked at Start Date
   fxRateToEur: number; // Locked at End Date for closed trades; live/cached for open trades
 
   notes: string | null;
@@ -116,6 +117,7 @@ export interface NewTradeInput {
   stopMoved?: boolean;
   trimmedAt2R?: boolean;
   manualLatestPrice?: number | null;
+  entryFxRateToEur?: number;
   fxRateToEur?: number;
   notes?: string | null;
 }
@@ -173,6 +175,7 @@ export const SCHEMA_DDL = `
     stop_moved INTEGER NOT NULL DEFAULT 0,
     trimmed_at_2r INTEGER NOT NULL DEFAULT 0,
     manual_latest_price REAL,
+    entry_fx_rate_to_eur REAL NOT NULL DEFAULT 1.0,
     fx_rate_to_eur REAL NOT NULL DEFAULT 1.0,
     notes TEXT,
     created_at TEXT NOT NULL,
