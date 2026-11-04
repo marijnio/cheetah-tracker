@@ -19,6 +19,7 @@ const KNOWN_COMPANY_NAMES: Record<string, string> = {
   TSM: "Taiwan Semiconductor Mfg. Co.",
   NBIS: "Nebius Group N.V.",
   ASML: "ASML Holding N.V. (ADR)",
+  "ASML.AS": "ASML Holding N.V.",
   "AMS:ASML": "ASML Holding N.V.",
   AVGO: "Broadcom Inc.",
   VRT: "Vertiv Holdings Co",
@@ -43,6 +44,7 @@ const KNOWN_COMPANY_NAMES: Record<string, string> = {
   BHP: "BHP Group Limited",
   IBKR: "Interactive Brokers Group",
   MLI: "Mueller Industries, Inc.",
+  "INGA.AS": "ING Groep N.V.",
   "AMS:INGA": "ING Groep N.V.",
   ING: "ING Groep N.V. (ADR)",
   BLBD: "Blue Bird Corporation",
@@ -51,8 +53,10 @@ const KNOWN_COMPANY_NAMES: Record<string, string> = {
   ERO: "Ero Copper Corp.",
   REPX: "Riley Exploration Permian",
   CNQ: "Canadian Natural Resources (NYSE)",
+  "CNQ.TO": "Canadian Natural Resources Ltd.",
   "TSE:CNQ": "Canadian Natural Resources Ltd.",
   XOM: "Exxon Mobil Corporation",
+  "SXLEL.XC": "SPDR S&P U.S. Energy Select ETF",
   SXLE: "SPDR S&P U.S. Energy Select ETF",
   RIG: "Transocean Ltd.",
   AMR: "Alpha Metallurgical Resources",
@@ -60,13 +64,16 @@ const KNOWN_COMPANY_NAMES: Record<string, string> = {
   VMI: "Valmont Industries, Inc.",
   HCC: "Warrior Met Coal, Inc.",
   DOCN: "DigitalOcean Holdings, Inc.",
+  "IUES.L": "iShares S&P 500 Energy Sector UCITS",
   "LON:IUES": "iShares S&P 500 Energy Sector UCITS",
   MOH: "Molina Healthcare, Inc.",
   GLW: "Corning Incorporated",
   FIX: "Comfort Systems USA, Inc.",
   DHT: "DHT Holdings, Inc.",
   JPM: "JPMorgan Chase & Co.",
+  "VWS.CO": "Vestas Wind Systems A/S",
   VWS: "Vestas Wind Systems A/S",
+  "EVO.ST": "Evolution AB (publ)",
   "STO:EVO": "Evolution AB (publ)",
   INTC: "Intel Corporation",
   PBR: "Petróleo Brasileiro S.A. - Petrobras",
@@ -74,6 +81,7 @@ const KNOWN_COMPANY_NAMES: Record<string, string> = {
   FRSH: "Freshworks Inc.",
   SN: "SharkNinja, Inc.",
   GCT: "GigaCloud Technology Inc.",
+  "INVE-B.ST": "Investor AB (Class B)",
   "STO:INVE-B": "Investor AB (Class B)",
   TXN: "Texas Instruments Incorporated",
 };
@@ -83,19 +91,19 @@ const DEFAULT_FOREX_PAIRS: Array<{
   yahooSymbol: string;
   latestRate: number;
 }> = [
-  { fromCurrency: "USD", yahooSymbol: "USDEUR=X", latestRate: 0.89338 },
-  { fromCurrency: "CAD", yahooSymbol: "CADEUR=X", latestRate: 0.621215 },
-  { fromCurrency: "SEK", yahooSymbol: "SEKEUR=X", latestRate: 0.09125 },
-  { fromCurrency: "DKK", yahooSymbol: "DKKEUR=X", latestRate: 0.133774 },
-  { fromCurrency: "GBP", yahooSymbol: "GBPEUR=X", latestRate: 1.185 },
-];
+    { fromCurrency: "USD", yahooSymbol: "USDEUR=X", latestRate: 0.89338 },
+    { fromCurrency: "CAD", yahooSymbol: "CADEUR=X", latestRate: 0.621215 },
+    { fromCurrency: "SEK", yahooSymbol: "SEKEUR=X", latestRate: 0.09125 },
+    { fromCurrency: "DKK", yahooSymbol: "DKKEUR=X", latestRate: 0.133774 },
+    { fromCurrency: "GBP", yahooSymbol: "GBPEUR=X", latestRate: 1.185 },
+  ];
 
 const globalForDb = globalThis as unknown as {
   sqliteDb: DatabaseSync | undefined;
   initializedVersion: number | undefined;
 };
 
-const CURRENT_DB_INIT_VERSION = 2;
+const CURRENT_DB_INIT_VERSION = 3;
 
 function getDatabasePath(): string {
   if (process.env.DATABASE_URL) {
@@ -141,6 +149,30 @@ function ensureSchemaAndSeed(db: DatabaseSync): void {
   db.exec(
     "CREATE INDEX IF NOT EXISTS idx_trades_security_id ON trades(security_id);"
   );
+
+  // Version 3 Migration: Migrate to single unified ticker
+  const secCols = db
+    .prepare("PRAGMA table_info(securities)")
+    .all() as unknown as Array<{ name: string }>;
+  const hasProviderSymbol = secCols.some((c) => c.name === "provider_symbol");
+
+  if (hasProviderSymbol) {
+    // 1. Update securities.ticker to provider_symbol where different
+    db.exec(`
+      UPDATE securities
+      SET ticker = provider_symbol
+      WHERE provider_symbol IS NOT NULL AND provider_symbol != '' AND ticker != provider_symbol;
+    `);
+
+    // 2. Update trades.ticker to match linked security ticker
+    db.exec(`
+      UPDATE trades
+      SET ticker = (
+        SELECT s.ticker FROM securities s WHERE s.id = trades.security_id
+      )
+      WHERE security_id IS NOT NULL;
+    `);
+  }
 
   // 1. Seed default Forex Pairs if missing
   const now = new Date().toISOString();
@@ -200,40 +232,65 @@ export function syncSecuritiesFromTrades(customDb?: DatabaseSync): void {
 
   const distinctRows = db
     .prepare(
-      `SELECT ticker, yahoo_ticker, gics_sector, currency,
+      `SELECT ticker, gics_sector, currency,
               MAX(COALESCE(manual_latest_price, sell_price, buy_price)) as last_known_price
        FROM trades
        GROUP BY ticker`
     )
     .all() as unknown as Array<{
-    ticker: string;
-    yahoo_ticker: string;
-    gics_sector: string;
-    currency: string;
-    last_known_price: number | null;
-  }>;
+      ticker: string;
+      gics_sector: string;
+      currency: string;
+      last_known_price: number | null;
+    }>;
 
-  const insertSec = db.prepare(`
-    INSERT OR IGNORE INTO securities (
-      ticker, name, isin, gics_sector, currency,
-      quote_provider, provider_symbol, latest_price, previous_close,
-      last_quote_at, quote_status, quote_error, notes, created_at, updated_at
-    ) VALUES (?, ?, NULL, ?, ?, 'YAHOO', ?, ?, NULL, ?, 'OK', NULL, NULL, ?, ?)
-  `);
+  const secCols = db
+    .prepare("PRAGMA table_info(securities)")
+    .all() as unknown as Array<{ name: string }>;
+  const hasProviderSymbol = secCols.some((c) => c.name === "provider_symbol");
+
+  const insertSec = hasProviderSymbol
+    ? db.prepare(`
+        INSERT OR IGNORE INTO securities (
+          ticker, name, isin, gics_sector, currency,
+          quote_provider, provider_symbol, latest_price, previous_close,
+          last_quote_at, quote_status, quote_error, notes, created_at, updated_at
+        ) VALUES (?, ?, NULL, ?, ?, 'YAHOO', ?, ?, NULL, ?, 'OK', NULL, NULL, ?, ?)
+      `)
+    : db.prepare(`
+        INSERT OR IGNORE INTO securities (
+          ticker, name, isin, gics_sector, currency,
+          quote_provider, latest_price, previous_close,
+          last_quote_at, quote_status, quote_error, notes, created_at, updated_at
+        ) VALUES (?, ?, NULL, ?, ?, 'YAHOO', ?, NULL, ?, 'OK', NULL, NULL, ?, ?)
+      `);
 
   for (const r of distinctRows) {
     const companyName = KNOWN_COMPANY_NAMES[r.ticker] || r.ticker;
-    insertSec.run(
-      r.ticker,
-      companyName,
-      r.gics_sector || "Uncategorized",
-      r.currency || "USD",
-      r.yahoo_ticker || r.ticker,
-      r.last_known_price,
-      now,
-      now,
-      now
-    );
+    if (hasProviderSymbol) {
+      insertSec.run(
+        r.ticker,
+        companyName,
+        r.gics_sector || "Uncategorized",
+        r.currency || "USD",
+        r.ticker,
+        r.last_known_price,
+        now,
+        now,
+        now
+      );
+    } else {
+      insertSec.run(
+        r.ticker,
+        companyName,
+        r.gics_sector || "Uncategorized",
+        r.currency || "USD",
+        r.last_known_price,
+        now,
+        now,
+        now
+      );
+    }
   }
 
   // Link any unlinked trades to their security_id
@@ -258,7 +315,7 @@ interface RawSecurityRow {
   gics_sector: string;
   currency: string;
   quote_provider: string;
-  provider_symbol: string;
+  provider_symbol?: string | null;
   latest_price: number | null;
   previous_close: number | null;
   last_quote_at: string | null;
@@ -280,7 +337,6 @@ function mapRowToSecurity(row: RawSecurityRow): SecurityRecord {
     gicsSector: row.gics_sector,
     currency: row.currency,
     quoteProvider: (row.quote_provider as QuoteProviderType) || "YAHOO",
-    providerSymbol: row.provider_symbol,
     latestPrice: row.latest_price,
     previousClose: row.previous_close,
     lastQuoteAt: row.last_quote_at,
@@ -345,75 +401,128 @@ export function upsertSecurity(
   const db = customDb || getDb();
   const now = new Date().toISOString();
   const tickerInfo = mapToYahooTicker(input.ticker, input.currency);
-  const ticker = tickerInfo.rawTicker;
+  const ticker = (tickerInfo.yahooTicker || tickerInfo.rawTicker).toUpperCase();
   const currency = (input.currency || tickerInfo.inferredCurrency).toUpperCase();
-  const providerSymbol = (
-    input.providerSymbol || tickerInfo.yahooTicker
-  ).toUpperCase();
   const name =
-    input.name?.trim() || KNOWN_COMPANY_NAMES[ticker] || tickerInfo.symbol;
+    input.name?.trim() ||
+    KNOWN_COMPANY_NAMES[ticker] ||
+    KNOWN_COMPANY_NAMES[tickerInfo.rawTicker] ||
+    tickerInfo.symbol;
   const gicsSector = input.gicsSector || "Uncategorized";
   const quoteProvider = input.quoteProvider || "YAHOO";
+
+  const secCols = db
+    .prepare("PRAGMA table_info(securities)")
+    .all() as unknown as Array<{ name: string }>;
+  const hasProviderSymbol = secCols.some((c) => c.name === "provider_symbol");
 
   const existing = db
     .prepare("SELECT * FROM securities WHERE ticker = ?")
     .get(ticker) as unknown as RawSecurityRow | undefined;
 
   if (existing) {
-    db.prepare(
-      `UPDATE securities SET
-        name = ?,
-        isin = ?,
-        gics_sector = ?,
-        currency = ?,
-        quote_provider = ?,
-        provider_symbol = ?,
-        latest_price = COALESCE(?, latest_price),
-        notes = COALESCE(?, notes),
-        updated_at = ?
-       WHERE id = ?`
-    ).run(
-      input.name !== undefined ? name : existing.name,
-      input.isin !== undefined ? input.isin : existing.isin,
-      input.gicsSector !== undefined ? gicsSector : existing.gics_sector,
-      input.currency !== undefined ? currency : existing.currency,
-      input.quoteProvider !== undefined
-        ? quoteProvider
-        : existing.quote_provider,
-      input.providerSymbol !== undefined
-        ? providerSymbol
-        : existing.provider_symbol,
-      input.latestPrice ?? null,
-      input.notes ?? null,
-      now,
-      existing.id
-    );
+    if (hasProviderSymbol) {
+      db.prepare(
+        `UPDATE securities SET
+          name = ?,
+          isin = ?,
+          gics_sector = ?,
+          currency = ?,
+          quote_provider = ?,
+          provider_symbol = ?,
+          latest_price = COALESCE(?, latest_price),
+          notes = COALESCE(?, notes),
+          updated_at = ?
+         WHERE id = ?`
+      ).run(
+        input.name !== undefined ? name : existing.name,
+        input.isin !== undefined ? input.isin : existing.isin,
+        input.gicsSector !== undefined ? gicsSector : existing.gics_sector,
+        input.currency !== undefined ? currency : existing.currency,
+        input.quoteProvider !== undefined
+          ? quoteProvider
+          : existing.quote_provider,
+        ticker,
+        input.latestPrice ?? null,
+        input.notes ?? null,
+        now,
+        existing.id
+      );
+    } else {
+      db.prepare(
+        `UPDATE securities SET
+          name = ?,
+          isin = ?,
+          gics_sector = ?,
+          currency = ?,
+          quote_provider = ?,
+          latest_price = COALESCE(?, latest_price),
+          notes = COALESCE(?, notes),
+          updated_at = ?
+         WHERE id = ?`
+      ).run(
+        input.name !== undefined ? name : existing.name,
+        input.isin !== undefined ? input.isin : existing.isin,
+        input.gicsSector !== undefined ? gicsSector : existing.gics_sector,
+        input.currency !== undefined ? currency : existing.currency,
+        input.quoteProvider !== undefined
+          ? quoteProvider
+          : existing.quote_provider,
+        input.latestPrice ?? null,
+        input.notes ?? null,
+        now,
+        existing.id
+      );
+    }
     return getSecurityById(existing.id)!;
   }
 
-  const res = db
-    .prepare(
-      `INSERT INTO securities (
-        ticker, name, isin, gics_sector, currency,
-        quote_provider, provider_symbol, latest_price, previous_close,
-        last_quote_at, quote_status, quote_error, notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?)`
-    )
-    .run(
-      ticker,
-      name,
-      input.isin ?? null,
-      gicsSector,
-      currency,
-      quoteProvider,
-      providerSymbol,
-      input.latestPrice ?? null,
-      input.latestPrice ? now : null,
-      quoteProvider === "MANUAL" ? "MANUAL" : "PENDING",
-      input.notes ?? null,
-      now,
-      now
-    );
+  const res = hasProviderSymbol
+    ? db
+      .prepare(
+        `INSERT INTO securities (
+            ticker, name, isin, gics_sector, currency,
+            quote_provider, provider_symbol, latest_price, previous_close,
+            last_quote_at, quote_status, quote_error, notes, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?)`
+      )
+      .run(
+        ticker,
+        name,
+        input.isin ?? null,
+        gicsSector,
+        currency,
+        quoteProvider,
+        ticker,
+        input.latestPrice ?? null,
+        input.latestPrice ? now : null,
+        quoteProvider === "MANUAL" ? "MANUAL" : "PENDING",
+        input.notes ?? null,
+        now,
+        now
+      )
+    : db
+      .prepare(
+        `INSERT INTO securities (
+            ticker, name, isin, gics_sector, currency,
+            quote_provider, latest_price, previous_close,
+            last_quote_at, quote_status, quote_error, notes, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?)`
+      )
+      .run(
+        ticker,
+        name,
+        input.isin ?? null,
+        gicsSector,
+        currency,
+        quoteProvider,
+        input.latestPrice ?? null,
+        input.latestPrice ? now : null,
+        quoteProvider === "MANUAL" ? "MANUAL" : "PENDING",
+        input.notes ?? null,
+        now,
+        now
+      );
 
   // Ensure currency exists in forex_pairs if non-EUR
   if (currency !== "EUR") {
@@ -438,73 +547,154 @@ export function updateSecurityById(
   const db = getDb();
   const now = new Date().toISOString();
 
-  const nextTicker = (updates.ticker ?? existing.ticker).trim().toUpperCase();
+  const rawTicker = (updates.ticker ?? existing.ticker).trim().toUpperCase();
+  const nextTicker = mapToYahooTicker(rawTicker).yahooTicker;
   const nextCurrency = (
     updates.currency ?? existing.currency
   ).trim().toUpperCase();
   const nextSector = updates.gicsSector ?? existing.gicsSector;
-  const nextProviderSymbol = (
-    updates.providerSymbol ?? existing.providerSymbol
-  )
-    .trim()
-    .toUpperCase();
   const nextQuoteProvider = updates.quoteProvider ?? existing.quoteProvider;
   const nextLatestPrice =
     updates.latestPrice !== undefined
       ? updates.latestPrice
       : existing.latestPrice;
 
-  db.prepare(
-    `UPDATE securities SET
-      ticker = ?,
-      name = ?,
-      isin = ?,
-      gics_sector = ?,
-      currency = ?,
-      quote_provider = ?,
-      provider_symbol = ?,
-      latest_price = ?,
-      previous_close = ?,
-      last_quote_at = ?,
-      quote_status = ?,
-      quote_error = ?,
-      notes = ?,
-      updated_at = ?
-     WHERE id = ?`
-  ).run(
-    nextTicker,
-    updates.name !== undefined ? updates.name : existing.name,
-    updates.isin !== undefined ? updates.isin : existing.isin,
-    nextSector,
-    nextCurrency,
-    nextQuoteProvider,
-    nextProviderSymbol,
-    nextLatestPrice,
-    updates.previousClose !== undefined
-      ? updates.previousClose
-      : existing.previousClose,
-    updates.lastQuoteAt !== undefined
-      ? updates.lastQuoteAt
-      : existing.lastQuoteAt,
-    updates.quoteStatus !== undefined
-      ? updates.quoteStatus
-      : existing.quoteStatus,
-    updates.quoteError !== undefined ? updates.quoteError : existing.quoteError,
-    updates.notes !== undefined ? updates.notes : existing.notes,
-    now,
-    id
-  );
+  const secCols = db
+    .prepare("PRAGMA table_info(securities)")
+    .all() as unknown as Array<{ name: string }>;
+  const hasProviderSymbol = secCols.some((c) => c.name === "provider_symbol");
 
-  // Propagate ticker, yahoo_ticker, gics_sector, and currency changes to linked trades
-  db.prepare(
-    `UPDATE trades SET
-      ticker = ?,
-      yahoo_ticker = ?,
-      gics_sector = ?,
-      currency = ?,
-      updated_at = ?
-     WHERE security_id = ?`
-  ).run(nextTicker, nextProviderSymbol, nextSector, nextCurrency, now, id);
+  if (hasProviderSymbol) {
+    db.prepare(
+      `UPDATE securities SET
+        ticker = ?,
+        name = ?,
+        isin = ?,
+        gics_sector = ?,
+        currency = ?,
+        quote_provider = ?,
+        provider_symbol = ?,
+        latest_price = ?,
+        previous_close = ?,
+        last_quote_at = ?,
+        quote_status = ?,
+        quote_error = ?,
+        notes = ?,
+        updated_at = ?
+       WHERE id = ?`
+    ).run(
+      nextTicker,
+      updates.name !== undefined ? updates.name : existing.name,
+      updates.isin !== undefined ? updates.isin : existing.isin,
+      nextSector,
+      nextCurrency,
+      nextQuoteProvider,
+      nextTicker,
+      nextLatestPrice,
+      updates.previousClose !== undefined
+        ? updates.previousClose
+        : existing.previousClose,
+      updates.lastQuoteAt !== undefined
+        ? updates.lastQuoteAt
+        : updates.latestPrice !== undefined && updates.latestPrice !== null
+          ? now
+          : existing.lastQuoteAt,
+      updates.quoteStatus !== undefined
+        ? updates.quoteStatus
+        : updates.latestPrice !== undefined && updates.latestPrice !== null
+          ? (nextQuoteProvider === "MANUAL" ? "MANUAL" : "OK")
+          : existing.quoteStatus,
+      updates.quoteError !== undefined
+        ? updates.quoteError
+        : updates.latestPrice !== undefined && updates.latestPrice !== null
+          ? null
+          : existing.quoteError,
+      updates.notes !== undefined ? updates.notes : existing.notes,
+      now,
+      id
+    );
+  } else {
+    db.prepare(
+      `UPDATE securities SET
+        ticker = ?,
+        name = ?,
+        isin = ?,
+        gics_sector = ?,
+        currency = ?,
+        quote_provider = ?,
+        latest_price = ?,
+        previous_close = ?,
+        last_quote_at = ?,
+        quote_status = ?,
+        quote_error = ?,
+        notes = ?,
+        updated_at = ?
+       WHERE id = ?`
+    ).run(
+      nextTicker,
+      updates.name !== undefined ? updates.name : existing.name,
+      updates.isin !== undefined ? updates.isin : existing.isin,
+      nextSector,
+      nextCurrency,
+      nextQuoteProvider,
+      nextLatestPrice,
+      updates.previousClose !== undefined
+        ? updates.previousClose
+        : existing.previousClose,
+      updates.lastQuoteAt !== undefined
+        ? updates.lastQuoteAt
+        : updates.latestPrice !== undefined && updates.latestPrice !== null
+          ? now
+          : existing.lastQuoteAt,
+      updates.quoteStatus !== undefined
+        ? updates.quoteStatus
+        : updates.latestPrice !== undefined && updates.latestPrice !== null
+          ? (nextQuoteProvider === "MANUAL" ? "MANUAL" : "OK")
+          : existing.quoteStatus,
+      updates.quoteError !== undefined
+        ? updates.quoteError
+        : updates.latestPrice !== undefined && updates.latestPrice !== null
+          ? null
+          : existing.quoteError,
+      updates.notes !== undefined ? updates.notes : existing.notes,
+      now,
+      id
+    );
+  }
+
+  // Propagate ticker, gics_sector, and currency changes to linked trades
+  const tradeCols = db
+    .prepare("PRAGMA table_info(trades)")
+    .all() as unknown as Array<{ name: string }>;
+  const hasYahooTicker = tradeCols.some((c) => c.name === "yahoo_ticker");
+
+  if (hasYahooTicker) {
+    db.prepare(
+      `UPDATE trades SET
+        ticker = ?,
+        yahoo_ticker = ?,
+        gics_sector = ?,
+        currency = ?,
+        updated_at = ?
+       WHERE security_id = ?`
+    ).run(nextTicker, nextTicker, nextSector, nextCurrency, now, id);
+  } else {
+    db.prepare(
+      `UPDATE trades SET
+        ticker = ?,
+        gics_sector = ?,
+        currency = ?,
+        updated_at = ?
+       WHERE security_id = ?`
+    ).run(nextTicker, nextSector, nextCurrency, now, id);
+  }
+
+  // If a latestPrice was updated, also synchronize manual_latest_price on open trades
+  if (updates.latestPrice !== undefined && updates.latestPrice !== null) {
+    db.prepare(
+      `UPDATE trades SET manual_latest_price = ?, updated_at = ? WHERE (security_id = ? OR ticker = ?) AND end_date IS NULL`
+    ).run(updates.latestPrice, now, id, nextTicker);
+  }
 
   if (nextCurrency !== "EUR") {
     ensureForexPairExists(nextCurrency, db);
@@ -736,7 +926,11 @@ interface RawTradeRow {
   security_id: number | null;
   ticker: string;
   security_name?: string | null;
-  yahoo_ticker: string;
+  quote_last_quote_at?: string | null;
+  quote_status?: SecurityRecord["quoteStatus"] | null;
+  quote_provider?: QuoteProviderType | null;
+  quote_error?: string | null;
+  quote_previous_close?: number | null;
   gics_sector: string;
   start_date: string;
   end_date: string | null;
@@ -761,7 +955,6 @@ function mapRowToTrade(row: RawTradeRow): TradeRecord {
     ticker: row.ticker,
     securityName:
       row.security_name || KNOWN_COMPANY_NAMES[row.ticker] || row.ticker,
-    yahooTicker: row.yahoo_ticker,
     gicsSector: row.gics_sector,
     startDate: row.start_date,
     endDate: row.end_date,
@@ -777,15 +970,26 @@ function mapRowToTrade(row: RawTradeRow): TradeRecord {
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    lastQuoteAt: row.quote_last_quote_at ?? null,
+    quoteStatus: row.quote_status ?? undefined,
+    quoteProvider: row.quote_provider ?? undefined,
+    quoteError: row.quote_error ?? null,
+    previousClose: row.quote_previous_close ?? null,
   };
 }
 
 export function getAllTrades(): TradeRecord[] {
   const db = getDb();
   const stmt = db.prepare(`
-    SELECT t.*, s.name as security_name
+    SELECT t.*,
+           s.name as security_name,
+           s.last_quote_at as quote_last_quote_at,
+           s.quote_status as quote_status,
+           s.quote_provider as quote_provider,
+           s.quote_error as quote_error,
+           s.previous_close as quote_previous_close
     FROM trades t
-    LEFT JOIN securities s ON s.id = t.security_id
+    LEFT JOIN securities s ON (s.id = t.security_id OR (t.security_id IS NULL AND s.ticker = t.ticker))
     ORDER BY
       CASE WHEN t.end_date IS NULL THEN 0 ELSE 1 END ASC,
       COALESCE(t.end_date, t.start_date) DESC,
@@ -800,9 +1004,15 @@ export function getTradeById(id: number): TradeRecord | null {
   const db = getDb();
   const row = db
     .prepare(
-      `SELECT t.*, s.name as security_name
+      `SELECT t.*,
+              s.name as security_name,
+              s.last_quote_at as quote_last_quote_at,
+              s.quote_status as quote_status,
+              s.quote_provider as quote_provider,
+              s.quote_error as quote_error,
+              s.previous_close as quote_previous_close
        FROM trades t
-       LEFT JOIN securities s ON s.id = t.security_id
+       LEFT JOIN securities s ON (s.id = t.security_id OR (t.security_id IS NULL AND s.ticker = t.ticker))
        WHERE t.id = ?`
     )
     .get(id) as unknown as RawTradeRow | undefined;
@@ -823,7 +1033,6 @@ export function createTrade(input: NewTradeInput): TradeRecord {
         ticker: input.ticker,
         gicsSector: input.gicsSector,
         currency: input.currency,
-        providerSymbol: input.yahooTicker,
         latestPrice: input.manualLatestPrice ?? input.sellPrice ?? input.buyPrice,
       },
       db
@@ -836,35 +1045,69 @@ export function createTrade(input: NewTradeInput): TradeRecord {
       ? 1.0
       : (input.fxRateToEur ?? getLiveFxMap()[currency] ?? getDefaultFxToEur(currency));
 
-  const stmt = db.prepare(`
-    INSERT INTO trades (
-      security_id, ticker, yahoo_ticker, gics_sector, start_date, end_date,
-      shares, buy_price, sell_price, currency, initial_stop_loss,
-      stop_moved, trimmed_at_2r, manual_latest_price, fx_rate_to_eur,
-      notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  const tradeCols = db
+    .prepare("PRAGMA table_info(trades)")
+    .all() as unknown as Array<{ name: string }>;
+  const hasYahooTicker = tradeCols.some((c) => c.name === "yahoo_ticker");
 
-  const result = stmt.run(
-    security.id,
-    security.ticker,
-    security.providerSymbol,
-    input.gicsSector || security.gicsSector,
-    input.startDate,
-    input.endDate || null,
-    input.shares,
-    input.buyPrice,
-    input.sellPrice ?? null,
-    currency,
-    input.initialStopLoss,
-    input.stopMoved ? 1 : 0,
-    input.trimmedAt2R ? 1 : 0,
-    input.manualLatestPrice ?? null,
-    fxRate,
-    input.notes ?? null,
-    now,
-    now
-  );
+  const stmt = hasYahooTicker
+    ? db.prepare(`
+        INSERT INTO trades (
+          security_id, ticker, yahoo_ticker, gics_sector, start_date, end_date,
+          shares, buy_price, sell_price, currency, initial_stop_loss,
+          stop_moved, trimmed_at_2r, manual_latest_price, fx_rate_to_eur,
+          notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+    : db.prepare(`
+        INSERT INTO trades (
+          security_id, ticker, gics_sector, start_date, end_date,
+          shares, buy_price, sell_price, currency, initial_stop_loss,
+          stop_moved, trimmed_at_2r, manual_latest_price, fx_rate_to_eur,
+          notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+  const result = hasYahooTicker
+    ? stmt.run(
+      security.id,
+      security.ticker,
+      security.ticker,
+      input.gicsSector || security.gicsSector,
+      input.startDate,
+      input.endDate || null,
+      input.shares,
+      input.buyPrice,
+      input.sellPrice ?? null,
+      currency,
+      input.initialStopLoss,
+      input.stopMoved ? 1 : 0,
+      input.trimmedAt2R ? 1 : 0,
+      input.manualLatestPrice ?? null,
+      fxRate,
+      input.notes ?? null,
+      now,
+      now
+    )
+    : stmt.run(
+      security.id,
+      security.ticker,
+      input.gicsSector || security.gicsSector,
+      input.startDate,
+      input.endDate || null,
+      input.shares,
+      input.buyPrice,
+      input.sellPrice ?? null,
+      currency,
+      input.initialStopLoss,
+      input.stopMoved ? 1 : 0,
+      input.trimmedAt2R ? 1 : 0,
+      input.manualLatestPrice ?? null,
+      fxRate,
+      input.notes ?? null,
+      now,
+      now
+    );
 
   // If user entered a latest price on an open position, also update security's latest_price if empty
   if (input.manualLatestPrice && !security.latestPrice) {
@@ -894,10 +1137,6 @@ export function updateTrade(
   ).toUpperCase();
   let nextSector =
     updates.gicsSector !== undefined ? updates.gicsSector : existing.gicsSector;
-  let nextYahoo =
-    updates.yahooTicker !== undefined
-      ? updates.yahooTicker
-      : existing.yahooTicker;
 
   if (updates.securityId && updates.securityId !== existing.securityId) {
     const linkedSec = getSecurityById(updates.securityId);
@@ -906,7 +1145,6 @@ export function updateTrade(
       nextTicker = linkedSec.ticker;
       nextCurrency = linkedSec.currency;
       nextSector = linkedSec.gicsSector;
-      nextYahoo = linkedSec.providerSymbol;
     }
   } else if (updates.ticker && updates.ticker !== existing.ticker) {
     const upsertedSec = upsertSecurity(
@@ -919,7 +1157,6 @@ export function updateTrade(
     );
     securityId = upsertedSec.id;
     nextTicker = upsertedSec.ticker;
-    nextYahoo = upsertedSec.providerSymbol;
   }
 
   const nextEndDate =
@@ -938,56 +1175,112 @@ export function updateTrade(
         ? updates.fxRateToEur
         : existing.fxRateToEur;
 
-  const stmt = db.prepare(`
-    UPDATE trades SET
-      security_id = ?,
-      ticker = ?,
-      yahoo_ticker = ?,
-      gics_sector = ?,
-      start_date = ?,
-      end_date = ?,
-      shares = ?,
-      buy_price = ?,
-      sell_price = ?,
-      currency = ?,
-      initial_stop_loss = ?,
-      stop_moved = ?,
-      trimmed_at_2r = ?,
-      manual_latest_price = ?,
-      fx_rate_to_eur = ?,
-      notes = ?,
-      updated_at = ?
-    WHERE id = ?
-  `);
+  const tradeCols = db
+    .prepare("PRAGMA table_info(trades)")
+    .all() as unknown as Array<{ name: string }>;
+  const hasYahooTicker = tradeCols.some((c) => c.name === "yahoo_ticker");
 
-  stmt.run(
-    securityId,
-    nextTicker,
-    nextYahoo,
-    nextSector,
-    updates.startDate !== undefined ? updates.startDate : existing.startDate,
-    nextEndDate || null,
-    updates.shares !== undefined ? updates.shares : existing.shares,
-    updates.buyPrice !== undefined ? updates.buyPrice : existing.buyPrice,
-    nextSellPrice ?? null,
-    nextCurrency,
-    updates.initialStopLoss !== undefined
-      ? updates.initialStopLoss
-      : existing.initialStopLoss,
-    (updates.stopMoved !== undefined ? updates.stopMoved : existing.stopMoved)
-      ? 1
-      : 0,
-    (updates.trimmedAt2R !== undefined
-      ? updates.trimmedAt2R
-      : existing.trimmedAt2R)
-      ? 1
-      : 0,
-    nextManualLatest ?? null,
-    nextFxRate,
-    updates.notes !== undefined ? updates.notes : existing.notes,
-    now,
-    id
-  );
+  const stmt = hasYahooTicker
+    ? db.prepare(`
+        UPDATE trades SET
+          security_id = ?,
+          ticker = ?,
+          yahoo_ticker = ?,
+          gics_sector = ?,
+          start_date = ?,
+          end_date = ?,
+          shares = ?,
+          buy_price = ?,
+          sell_price = ?,
+          currency = ?,
+          initial_stop_loss = ?,
+          stop_moved = ?,
+          trimmed_at_2r = ?,
+          manual_latest_price = ?,
+          fx_rate_to_eur = ?,
+          notes = ?,
+          updated_at = ?
+        WHERE id = ?
+      `)
+    : db.prepare(`
+        UPDATE trades SET
+          security_id = ?,
+          ticker = ?,
+          gics_sector = ?,
+          start_date = ?,
+          end_date = ?,
+          shares = ?,
+          buy_price = ?,
+          sell_price = ?,
+          currency = ?,
+          initial_stop_loss = ?,
+          stop_moved = ?,
+          trimmed_at_2r = ?,
+          manual_latest_price = ?,
+          fx_rate_to_eur = ?,
+          notes = ?,
+          updated_at = ?
+        WHERE id = ?
+      `);
+
+  if (hasYahooTicker) {
+    stmt.run(
+      securityId,
+      nextTicker,
+      nextTicker,
+      nextSector,
+      updates.startDate !== undefined ? updates.startDate : existing.startDate,
+      nextEndDate || null,
+      updates.shares !== undefined ? updates.shares : existing.shares,
+      updates.buyPrice !== undefined ? updates.buyPrice : existing.buyPrice,
+      nextSellPrice ?? null,
+      nextCurrency,
+      updates.initialStopLoss !== undefined
+        ? updates.initialStopLoss
+        : existing.initialStopLoss,
+      (updates.stopMoved !== undefined ? updates.stopMoved : existing.stopMoved)
+        ? 1
+        : 0,
+      (updates.trimmedAt2R !== undefined
+        ? updates.trimmedAt2R
+        : existing.trimmedAt2R)
+        ? 1
+        : 0,
+      nextManualLatest ?? null,
+      nextFxRate,
+      updates.notes !== undefined ? updates.notes : existing.notes,
+      now,
+      id
+    );
+  } else {
+    stmt.run(
+      securityId,
+      nextTicker,
+      nextSector,
+      updates.startDate !== undefined ? updates.startDate : existing.startDate,
+      nextEndDate || null,
+      updates.shares !== undefined ? updates.shares : existing.shares,
+      updates.buyPrice !== undefined ? updates.buyPrice : existing.buyPrice,
+      nextSellPrice ?? null,
+      nextCurrency,
+      updates.initialStopLoss !== undefined
+        ? updates.initialStopLoss
+        : existing.initialStopLoss,
+      (updates.stopMoved !== undefined ? updates.stopMoved : existing.stopMoved)
+        ? 1
+        : 0,
+      (updates.trimmedAt2R !== undefined
+        ? updates.trimmedAt2R
+        : existing.trimmedAt2R)
+        ? 1
+        : 0,
+      nextManualLatest ?? null,
+      nextFxRate,
+      updates.notes !== undefined ? updates.notes : existing.notes,
+      now,
+      id
+    );
+  }
 
   return getTradeById(id);
 }
@@ -1012,17 +1305,32 @@ export function bulkInsertTrades(
       db.exec("DELETE FROM trades;");
     }
 
-    const stmt = db.prepare(`
-      INSERT INTO trades (
-        security_id, ticker, yahoo_ticker, gics_sector, start_date, end_date,
-        shares, buy_price, sell_price, currency, initial_stop_loss,
-        stop_moved, trimmed_at_2r, manual_latest_price, fx_rate_to_eur,
-        notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    const tradeCols = db
+      .prepare("PRAGMA table_info(trades)")
+      .all() as unknown as Array<{ name: string }>;
+    const hasYahooTicker = tradeCols.some((c) => c.name === "yahoo_ticker");
+
+    const stmt = hasYahooTicker
+      ? db.prepare(`
+          INSERT INTO trades (
+            security_id, ticker, yahoo_ticker, gics_sector, start_date, end_date,
+            shares, buy_price, sell_price, currency, initial_stop_loss,
+            stop_moved, trimmed_at_2r, manual_latest_price, fx_rate_to_eur,
+            notes, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+      : db.prepare(`
+          INSERT INTO trades (
+            security_id, ticker, gics_sector, start_date, end_date,
+            shares, buy_price, sell_price, currency, initial_stop_loss,
+            stop_moved, trimmed_at_2r, manual_latest_price, fx_rate_to_eur,
+            notes, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
 
     for (const item of items) {
       const tickerInfo = mapToYahooTicker(item.ticker, item.currency);
+      const unifiedTicker = tickerInfo.yahooTicker || tickerInfo.rawTicker;
       const currency = (
         item.currency || tickerInfo.inferredCurrency
       ).toUpperCase();
@@ -1031,26 +1339,48 @@ export function bulkInsertTrades(
           ? 1.0
           : (item.fxRateToEur ?? getDefaultFxToEur(currency));
 
-      stmt.run(
-        null,
-        tickerInfo.rawTicker,
-        item.yahooTicker || tickerInfo.yahooTicker,
-        item.gicsSector || "Uncategorized",
-        item.startDate,
-        item.endDate || null,
-        item.shares,
-        item.buyPrice,
-        item.sellPrice ?? null,
-        currency,
-        item.initialStopLoss,
-        item.stopMoved ? 1 : 0,
-        item.trimmedAt2R ? 1 : 0,
-        item.manualLatestPrice ?? null,
-        fxRate,
-        item.notes ?? null,
-        now,
-        now
-      );
+      if (hasYahooTicker) {
+        stmt.run(
+          null,
+          unifiedTicker,
+          unifiedTicker,
+          item.gicsSector || "Uncategorized",
+          item.startDate,
+          item.endDate || null,
+          item.shares,
+          item.buyPrice,
+          item.sellPrice ?? null,
+          currency,
+          item.initialStopLoss,
+          item.stopMoved ? 1 : 0,
+          item.trimmedAt2R ? 1 : 0,
+          item.manualLatestPrice ?? null,
+          fxRate,
+          item.notes ?? null,
+          now,
+          now
+        );
+      } else {
+        stmt.run(
+          null,
+          unifiedTicker,
+          item.gicsSector || "Uncategorized",
+          item.startDate,
+          item.endDate || null,
+          item.shares,
+          item.buyPrice,
+          item.sellPrice ?? null,
+          currency,
+          item.initialStopLoss,
+          item.stopMoved ? 1 : 0,
+          item.trimmedAt2R ? 1 : 0,
+          item.manualLatestPrice ?? null,
+          fxRate,
+          item.notes ?? null,
+          now,
+          now
+        );
+      }
     }
 
     syncSecuritiesFromTrades(db);
@@ -1063,23 +1393,21 @@ export function bulkInsertTrades(
 }
 
 /**
- * Returns live/cached prices mapped by BOTH providerSymbol (e.g. 'ASML.AS') and raw ticker ('AMS:ASML').
+ * Returns live/cached prices mapped by single security ticker.
  */
 export function getLiveQuoteMap(): Record<string, number> {
   const db = getDb();
   const secRows = db
     .prepare(
-      "SELECT ticker, provider_symbol, latest_price FROM securities WHERE latest_price IS NOT NULL"
+      "SELECT ticker, latest_price FROM securities WHERE latest_price IS NOT NULL"
     )
     .all() as unknown as Array<{
-    ticker: string;
-    provider_symbol: string;
-    latest_price: number;
-  }>;
+      ticker: string;
+      latest_price: number;
+    }>;
 
   const map: Record<string, number> = {};
   for (const r of secRows) {
-    map[r.provider_symbol] = r.latest_price;
     map[r.ticker] = r.latest_price;
   }
   return map;

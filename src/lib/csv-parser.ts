@@ -161,8 +161,7 @@ export function parseTradesCsv(csvContent: string): NewTradeInput[] {
       rawTrimmed === "yes";
 
     results.push({
-      ticker: tickerInfo.rawTicker,
-      yahooTicker: tickerInfo.yahooTicker,
+      ticker: tickerInfo.yahooTicker || tickerInfo.rawTicker,
       gicsSector,
       startDate,
       endDate,

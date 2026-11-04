@@ -15,17 +15,33 @@ import {
   Upload,
   RotateCcw,
   Layers,
+  RefreshCw,
+  AlertTriangle,
+  AlertCircle,
+  Clock,
 } from "lucide-react";
 import type { ComputedTrade } from "@/lib/sepa-math";
+import type { SecurityRecord, QuoteProviderType } from "@/lib/db/schema";
+import { getQuoteAgeInfo } from "@/lib/quote-age";
+import { QuickQuoteModal } from "./quick-quote-modal";
 
 interface TradeTableProps {
   trades: ComputedTrade[];
+  securities?: SecurityRecord[];
   onToggleField: (
     trade: ComputedTrade,
     field: "stopMoved" | "trimmedAt2R"
   ) => Promise<void>;
   onEditTrade: (trade: ComputedTrade, mode?: "edit" | "close") => void;
   onDeleteTrade: (trade: ComputedTrade) => Promise<void>;
+  onUpdateQuote?: (
+    securityId: number,
+    latestPrice: number,
+    quoteProvider?: QuoteProviderType
+  ) => Promise<void>;
+  onSyncSecurityQuote?: (securityId: number) => Promise<void>;
+  onSyncAllOpenQuotes?: () => Promise<void>;
+  isSyncingAll?: boolean;
   sectorFilter: string;
   onSectorFilterChange: (next: string) => void;
   searchQuery: string;
@@ -98,9 +114,14 @@ function getRMultiplePillStyle(r: number): string {
 
 export function TradeTable({
   trades,
+  securities,
   onToggleField,
   onEditTrade,
   onDeleteTrade,
+  onUpdateQuote,
+  onSyncSecurityQuote,
+  onSyncAllOpenQuotes,
+  isSyncingAll,
   sectorFilter,
   onSectorFilterChange,
   searchQuery,
@@ -114,6 +135,34 @@ export function TradeTable({
 }: TradeTableProps) {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const [selectedQuoteTrade, setSelectedQuoteTrade] =
+    useState<ComputedTrade | null>(null);
+  const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
+  const [syncingSecurityId, setSyncingSecurityId] = useState<number | null>(
+    null
+  );
+
+  const staleOpenCount = useMemo(() => {
+    return trades.filter((t) => {
+      if (!t.isOpen) return false;
+      const sec = securities?.find(
+        (s) => s.id === t.securityId || s.ticker === t.ticker
+      );
+      const timestamp = sec?.lastQuoteAt ?? t.lastQuoteAt;
+      return getQuoteAgeInfo(timestamp).isDaysOld;
+    }).length;
+  }, [trades, securities]);
+
+  const handleSingleSyncQuote = async (secId: number) => {
+    if (!onSyncSecurityQuote) return;
+    setSyncingSecurityId(secId);
+    try {
+      await onSyncSecurityQuote(secId);
+    } finally {
+      setSyncingSecurityId(null);
+    }
+  };
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -184,6 +233,26 @@ export function TradeTable({
 
         {/* Right: Outlined Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          {staleOpenCount > 0 && onSyncAllOpenQuotes && (
+            <button
+              type="button"
+              disabled={isSyncingAll}
+              onClick={onSyncAllOpenQuotes}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
+              title={`${staleOpenCount} open position quotes are days old. Click to refresh all open quotes.`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>
+                {staleOpenCount} Stale Quote{staleOpenCount > 1 ? "s" : ""}
+              </span>
+              <RefreshCw
+                className={`w-3 h-3 text-amber-700 ml-0.5 ${
+                  isSyncingAll ? "animate-spin" : ""
+                }`}
+              />
+            </button>
+          )}
+
           <select
             value={sectorFilter}
             onChange={(e) => onSectorFilterChange(e.target.value)}
@@ -342,6 +411,19 @@ export function TradeTable({
                 const isOpen = trade.isOpen;
                 const perShareDiff = trade.latestPrice - trade.buyPrice;
 
+                const linkedSecurity =
+                  securities?.find(
+                    (s) =>
+                      s.id === trade.securityId || s.ticker === trade.ticker
+                  ) || null;
+                const quoteTimestamp =
+                  linkedSecurity?.lastQuoteAt ?? trade.lastQuoteAt;
+                const ageInfo = getQuoteAgeInfo(quoteTimestamp);
+                const isYahoo =
+                  (linkedSecurity?.quoteProvider ??
+                    trade.quoteProvider ??
+                    "YAHOO") === "YAHOO";
+
                 return (
                   <tr
                     key={trade.id}
@@ -415,15 +497,101 @@ export function TradeTable({
 
                     {/* Sell / Latest Price */}
                     <td className="py-3 px-2.5 text-right whitespace-nowrap">
-                      <span
-                        className={
-                          isOpen
-                            ? "text-blue-600 font-semibold"
-                            : "text-slate-700"
-                        }
-                      >
-                        {formatLocalPrice(trade.latestPrice, trade.currency)}
-                      </span>
+                      {isOpen ? (
+                        <div className="flex flex-col items-end">
+                          <div className="inline-flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedQuoteTrade(trade);
+                                setIsQuoteModalOpen(true);
+                              }}
+                              className="text-blue-600 font-semibold cursor-pointer hover:underline decoration-blue-300"
+                              title="Click to view quote details or update manually"
+                            >
+                              {formatLocalPrice(
+                                trade.latestPrice,
+                                trade.currency
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedQuoteTrade(trade);
+                                setIsQuoteModalOpen(true);
+                              }}
+                              className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                              title="Update quote manually"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                            {isYahoo &&
+                              onSyncSecurityQuote &&
+                              linkedSecurity && (
+                                <button
+                                  type="button"
+                                  disabled={
+                                    syncingSecurityId === linkedSecurity.id
+                                  }
+                                  onClick={() =>
+                                    handleSingleSyncQuote(linkedSecurity.id)
+                                  }
+                                  className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                  title="Refresh quote from Yahoo Finance"
+                                >
+                                  <RefreshCw
+                                    className={`w-3 h-3 ${
+                                      syncingSecurityId === linkedSecurity.id
+                                        ? "animate-spin text-blue-600"
+                                        : ""
+                                    }`}
+                                  />
+                                </button>
+                              )}
+                          </div>
+
+                          {/* Recency Badge */}
+                          {ageInfo.isDaysOld ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedQuoteTrade(trade);
+                                setIsQuoteModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 mt-0.5 cursor-pointer hover:bg-amber-100 transition-colors"
+                              title={ageInfo.tooltip}
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                              <span>{ageInfo.label} (Stale)</span>
+                            </button>
+                          ) : trade.quoteStatus === "ERROR" ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedQuoteTrade(trade);
+                                setIsQuoteModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 text-[10px] text-rose-500 font-medium mt-0.5 cursor-pointer hover:underline"
+                              title={trade.quoteError || "Error fetching quote"}
+                            >
+                              <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                              <span>Error</span>
+                            </button>
+                          ) : (
+                            <span
+                              className="text-[10px] text-slate-400 mt-0.5 inline-flex items-center gap-1 cursor-help"
+                              title={ageInfo.tooltip}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span>{ageInfo.label}</span>
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-700">
+                          {formatLocalPrice(trade.latestPrice, trade.currency)}
+                        </span>
+                      )}
                     </td>
 
                     {/* Entry Value € + Relative Position Sizing Bar */}
@@ -634,6 +802,31 @@ export function TradeTable({
           </tbody>
         </table>
       </div>
+
+      {/* Quick Quote Update Modal */}
+      <QuickQuoteModal
+        isOpen={isQuoteModalOpen}
+        onClose={() => {
+          setIsQuoteModalOpen(false);
+          setSelectedQuoteTrade(null);
+        }}
+        trade={selectedQuoteTrade}
+        security={
+          selectedQuoteTrade
+            ? securities?.find(
+                (s) =>
+                  s.id === selectedQuoteTrade.securityId ||
+                  s.ticker === selectedQuoteTrade.ticker
+              ) || null
+            : null
+        }
+        onSaveQuote={async (secId, price, provider) => {
+          if (onUpdateQuote) {
+            await onUpdateQuote(secId, price, provider);
+          }
+        }}
+        onSyncLiveQuote={onSyncSecurityQuote}
+      />
     </div>
   );
 }

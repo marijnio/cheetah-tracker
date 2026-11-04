@@ -3,7 +3,7 @@ export type FxProviderType = "YAHOO" | "FRANKFURTER" | "MANUAL";
 
 export interface SecurityRecord {
   id: number;
-  ticker: string; // Display ticker, e.g., 'NVDA', 'AMS:ASML', 'STO:INVE-B'
+  ticker: string; // Unified ticker symbol used for both display and quote fetching, e.g., 'NVDA', 'ASML.AS', 'INVE-B.ST'
   name: string; // Company / Security name, e.g., 'NVIDIA Corporation'
   isin: string | null;
   gicsSector: string;
@@ -11,7 +11,6 @@ export interface SecurityRecord {
 
   // Quote Provider Configuration
   quoteProvider: QuoteProviderType;
-  providerSymbol: string; // Yahoo Finance symbol, e.g., 'NVDA', 'ASML.AS', 'INVE-B.ST', 'VWS.CO'
   latestPrice: number | null;
   previousClose: number | null;
   lastQuoteAt: string | null;
@@ -34,7 +33,6 @@ export interface NewSecurityInput {
   gicsSector?: string;
   currency?: string;
   quoteProvider?: QuoteProviderType;
-  providerSymbol?: string;
   latestPrice?: number | null;
   notes?: string | null;
 }
@@ -74,7 +72,6 @@ export interface TradeRecord {
   securityId: number | null;
   ticker: string;
   securityName?: string;
-  yahooTicker: string;
   gicsSector: string;
 
   startDate: string; // YYYY-MM-DD
@@ -96,12 +93,18 @@ export interface TradeRecord {
 
   createdAt: string;
   updatedAt: string;
+
+  // Attached Security Quote Info
+  lastQuoteAt?: string | null;
+  quoteStatus?: "OK" | "PENDING" | "ERROR" | "MANUAL";
+  quoteProvider?: QuoteProviderType;
+  quoteError?: string | null;
+  previousClose?: number | null;
 }
 
 export interface NewTradeInput {
   securityId?: number | null;
   ticker: string;
-  yahooTicker?: string;
   gicsSector?: string;
   startDate: string;
   endDate?: string | null;
@@ -126,7 +129,6 @@ export const SCHEMA_DDL = `
     gics_sector TEXT NOT NULL DEFAULT 'Uncategorized',
     currency TEXT NOT NULL DEFAULT 'USD',
     quote_provider TEXT NOT NULL DEFAULT 'YAHOO',
-    provider_symbol TEXT NOT NULL,
     latest_price REAL,
     previous_close REAL,
     last_quote_at TEXT,
@@ -138,7 +140,6 @@ export const SCHEMA_DDL = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_securities_ticker ON securities(ticker);
-  CREATE INDEX IF NOT EXISTS idx_securities_provider_symbol ON securities(provider_symbol);
 
   CREATE TABLE IF NOT EXISTS forex_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,7 +162,6 @@ export const SCHEMA_DDL = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     security_id INTEGER REFERENCES securities(id) ON DELETE SET NULL,
     ticker TEXT NOT NULL,
-    yahoo_ticker TEXT NOT NULL,
     gics_sector TEXT NOT NULL DEFAULT 'Uncategorized',
     start_date TEXT NOT NULL,
     end_date TEXT,
@@ -184,8 +184,7 @@ export const SCHEMA_DDL = `
   CREATE INDEX IF NOT EXISTS idx_trades_ticker ON trades(ticker);
 
   CREATE TABLE IF NOT EXISTS quote_cache (
-    yahoo_ticker TEXT PRIMARY KEY,
-    raw_ticker TEXT NOT NULL,
+    ticker TEXT PRIMARY KEY,
     latest_price REAL NOT NULL,
     currency TEXT,
     gics_sector TEXT,

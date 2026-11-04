@@ -64,7 +64,7 @@ export async function PATCH(
 
     if (body.syncQuote && security) {
       try {
-        const quote = await fetchYahooQuote(security.providerSymbol, true);
+        const quote = await fetchYahooQuote(security.ticker, true);
         security = updateSecurityById(secId, {
           latestPrice: quote.regularMarketPrice,
           previousClose: quote.previousClose,

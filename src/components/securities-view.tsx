@@ -9,6 +9,7 @@ import {
   Trash2,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Clock,
   Globe,
   Sliders,
@@ -22,6 +23,7 @@ import type {
   QuoteProviderType,
 } from "@/lib/db/schema";
 import { mapToYahooTicker } from "@/lib/ticker-mapper";
+import { getQuoteAgeInfo } from "@/lib/quote-age";
 
 const GICS_SECTORS = [
   "Information Technology",
@@ -89,7 +91,6 @@ export function SecuritiesView({
   const [currency, setCurrency] = useState("USD");
   const [quoteProvider, setQuoteProvider] =
     useState<QuoteProviderType>("YAHOO");
-  const [providerSymbol, setProviderSymbol] = useState("");
   const [latestPrice, setLatestPrice] = useState("");
   const [notes, setNotes] = useState("");
   const [syncQuoteNow, setSyncQuoteNow] = useState(true);
@@ -107,7 +108,6 @@ export function SecuritiesView({
         if (
           !s.ticker.toLowerCase().includes(q) &&
           !s.name.toLowerCase().includes(q) &&
-          !s.providerSymbol.toLowerCase().includes(q) &&
           !s.gicsSector.toLowerCase().includes(q)
         ) {
           return false;
@@ -117,6 +117,20 @@ export function SecuritiesView({
     });
   }, [securities, sectorFilter, providerFilter, searchQuery]);
 
+  const { staleCount, staleOpenCount } = useMemo(() => {
+    let stale = 0;
+    let staleOpen = 0;
+    for (const s of securities) {
+      if (getQuoteAgeInfo(s.lastQuoteAt).isDaysOld) {
+        stale++;
+        if ((s.openTradeCount ?? 0) > 0) {
+          staleOpen++;
+        }
+      }
+    }
+    return { staleCount: stale, staleOpenCount: staleOpen };
+  }, [securities]);
+
   const openCreateModal = () => {
     setEditingSec(null);
     setTicker("");
@@ -125,7 +139,6 @@ export function SecuritiesView({
     setGicsSector("Information Technology");
     setCurrency("USD");
     setQuoteProvider("YAHOO");
-    setProviderSymbol("");
     setLatestPrice("");
     setNotes("");
     setSyncQuoteNow(true);
@@ -141,7 +154,6 @@ export function SecuritiesView({
     setGicsSector(sec.gicsSector || "Uncategorized");
     setCurrency(sec.currency || "USD");
     setQuoteProvider(sec.quoteProvider || "YAHOO");
-    setProviderSymbol(sec.providerSymbol || sec.ticker);
     setLatestPrice(sec.latestPrice !== null ? String(sec.latestPrice) : "");
     setNotes(sec.notes || "");
     setSyncQuoteNow(false);
@@ -152,14 +164,13 @@ export function SecuritiesView({
   const handleTickerInputChange = (val: string) => {
     setTicker(val);
     const mapped = mapToYahooTicker(val, currency);
-    setProviderSymbol(mapped.yahooTicker);
     if (mapped.inferredCurrency) {
       setCurrency(mapped.inferredCurrency);
     }
   };
 
   const handleLookupOnYahoo = async () => {
-    const target = providerSymbol.trim() || ticker.trim();
+    const target = ticker.trim();
     if (!target) return;
     setIsLookingUp(true);
     setLookupMessage(null);
@@ -172,8 +183,7 @@ export function SecuritiesView({
       const data = await res.json();
       if (res.ok && data.lookup) {
         const info = data.lookup;
-        if (!ticker.trim()) setTicker(info.rawTicker);
-        setProviderSymbol(info.providerSymbol);
+        setTicker(info.ticker || info.symbol);
         if (info.name) setName(info.name);
         if (info.gicsSector && info.gicsSector !== "Uncategorized") {
           setGicsSector(info.gicsSector);
@@ -181,7 +191,7 @@ export function SecuritiesView({
         if (info.currency) setCurrency(info.currency);
         if (info.latestPrice) setLatestPrice(String(info.latestPrice));
         setLookupMessage(
-          `Found ${info.name} (${info.providerSymbol}) @ ${info.currency} ${info.latestPrice}`
+          `Found ${info.name} (${info.ticker || info.symbol}) @ ${info.currency} ${info.latestPrice}`
         );
       } else {
         setLookupMessage(
@@ -208,16 +218,15 @@ export function SecuritiesView({
     e.preventDefault();
     setIsSaving(true);
     try {
+      const mapped = mapToYahooTicker(ticker.trim(), currency);
+      const unifiedTicker = (mapped.yahooTicker || mapped.rawTicker).toUpperCase();
       const payload: NewSecurityInput = {
-        ticker: ticker.trim().toUpperCase(),
-        name: name.trim() || ticker.trim().toUpperCase(),
+        ticker: unifiedTicker,
+        name: name.trim() || unifiedTicker,
         isin: isin.trim() || null,
         gicsSector,
         currency,
         quoteProvider,
-        providerSymbol:
-          providerSymbol.trim().toUpperCase() ||
-          mapToYahooTicker(ticker, currency).yahooTicker,
         latestPrice: latestPrice.trim() !== "" ? Number(latestPrice) : null,
         notes: notes.trim() || null,
       };
@@ -254,6 +263,16 @@ export function SecuritiesView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {staleOpenCount > 0 && (
+            <span
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-800"
+              title={`${staleOpenCount} open position quotes are days old and need to be refreshed`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+              <span>{staleOpenCount} Open Quotes Stale</span>
+            </span>
+          )}
+
           <button
             type="button"
             disabled={isSyncingAll}
@@ -261,9 +280,8 @@ export function SecuritiesView({
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
           >
             <RefreshCw
-              className={`w-3.5 h-3.5 text-blue-600 ${
-                isSyncingAll ? "animate-spin" : ""
-              }`}
+              className={`w-3.5 h-3.5 text-blue-600 ${isSyncingAll ? "animate-spin" : ""
+                }`}
             />
             <span>Sync Open Positions</span>
           </button>
@@ -296,7 +314,7 @@ export function SecuritiesView({
             <Search className="w-4 h-4 text-slate-400 absolute left-0 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search ticker, company, or Yahoo symbol..."
+              placeholder="Search ticker, company name, or GICS sector..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-transparent pl-6 pr-3 py-1 text-sm text-slate-800 placeholder-slate-400 focus:outline-none"
@@ -337,7 +355,6 @@ export function SecuritiesView({
                 <th className="py-3.5 px-3">GICS Sector</th>
                 <th className="py-3.5 px-3">Currency</th>
                 <th className="py-3.5 px-3">Quote Provider</th>
-                <th className="py-3.5 px-3">Provider Symbol</th>
                 <th className="py-3.5 px-3 text-right">Latest Quote</th>
                 <th className="py-3.5 px-3 text-center">Feed Status</th>
                 <th className="py-3.5 px-3 text-center">Trades</th>
@@ -348,28 +365,28 @@ export function SecuritiesView({
               {filteredSecurities.map((sec) => {
                 const sym = CURRENCY_SYMBOLS[sec.currency] ?? "";
                 const hasOpen = (sec.openTradeCount ?? 0) > 0;
+                const ageInfo = getQuoteAgeInfo(sec.lastQuoteAt);
                 const dayChangePct =
                   sec.latestPrice &&
-                  sec.previousClose &&
-                  sec.previousClose > 0
+                    sec.previousClose &&
+                    sec.previousClose > 0
                     ? ((sec.latestPrice - sec.previousClose) /
-                        sec.previousClose) *
-                      100
+                      sec.previousClose) *
+                    100
                     : null;
 
                 return (
                   <tr
                     key={sec.id}
-                    className={`group transition-colors ${
-                      hasOpen
+                    className={`group transition-colors ${hasOpen
                         ? "bg-blue-50/20 hover:bg-blue-50/50"
                         : "hover:bg-slate-50/80"
-                    }`}
+                      }`}
                   >
                     {/* Security Ticker & Name */}
                     <td className="py-3 pl-5 pr-3 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-blue-600 text-xs">
+                        <span className="font-semibold text-blue-600 text-xs font-mono">
                           {sec.ticker}
                         </span>
                         {hasOpen && (
@@ -410,32 +427,45 @@ export function SecuritiesView({
                       )}
                     </td>
 
-                    {/* Provider Symbol */}
-                    <td className="py-3 px-3 font-mono font-semibold text-slate-700 whitespace-nowrap">
-                      {sec.providerSymbol}
-                    </td>
-
                     {/* Latest Price + Day Change */}
                     <td className="py-3 px-3 text-right whitespace-nowrap">
                       {sec.latestPrice !== null ? (
-                        <div className="inline-flex items-center justify-end gap-1.5">
-                          <span className="font-semibold text-slate-900">
-                            {sym}
-                            {sec.latestPrice.toLocaleString("en-US", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </span>
-                          {dayChangePct !== null && (
+                        <div className="flex flex-col items-end">
+                          <div className="inline-flex items-center justify-end gap-1.5">
+                            <span className="font-semibold text-slate-900">
+                              {sym}
+                              {sec.latestPrice.toLocaleString("en-US", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </span>
+                            {dayChangePct !== null && (
+                              <span
+                                className={`px-1.5 py-0.2 rounded text-[10px] font-semibold ${dayChangePct >= 0
+                                    ? "bg-emerald-50 text-emerald-600"
+                                    : "bg-rose-50 text-rose-500"
+                                  }`}
+                              >
+                                {dayChangePct >= 0 ? "+" : ""}
+                                {dayChangePct.toFixed(2)}%
+                              </span>
+                            )}
+                          </div>
+                          {ageInfo.isDaysOld ? (
                             <span
-                              className={`px-1.5 py-0.2 rounded text-[10px] font-semibold ${
-                                dayChangePct >= 0
-                                  ? "bg-emerald-50 text-emerald-600"
-                                  : "bg-rose-50 text-rose-500"
-                              }`}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 mt-0.5 cursor-help"
+                              title={ageInfo.tooltip}
                             >
-                              {dayChangePct >= 0 ? "+" : ""}
-                              {dayChangePct.toFixed(2)}%
+                              <AlertTriangle className="w-2.5 h-2.5 text-amber-600" />
+                              {ageInfo.label} (Stale)
+                            </span>
+                          ) : (
+                            <span
+                              className="text-[10px] text-slate-400 mt-0.5 inline-flex items-center gap-1 cursor-help"
+                              title={ageInfo.tooltip}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              {ageInfo.label}
                             </span>
                           )}
                         </div>
@@ -447,17 +477,51 @@ export function SecuritiesView({
                     {/* Feed Status */}
                     <td className="py-3 px-3 text-center whitespace-nowrap">
                       {sec.quoteStatus === "OK" ? (
-                        <span
-                          title={
-                            sec.lastQuoteAt
-                              ? `Last synced: ${sec.lastQuoteAt}`
-                              : "Quote active"
-                          }
-                          className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium cursor-help"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Active
-                        </span>
+                        ageInfo.isDaysOld ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span
+                              title={ageInfo.tooltip}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 cursor-help"
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                              Stale ({ageInfo.label})
+                            </span>
+                            <span className="text-[10px] text-amber-600 mt-0.5 font-medium">
+                              Needs refresh
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex flex-col items-center">
+                            <span
+                              title={ageInfo.tooltip}
+                              className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium cursor-help"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Active
+                            </span>
+                            <span className="text-[10px] text-slate-400 mt-0.5">
+                              {ageInfo.label}
+                            </span>
+                          </div>
+                        )
+                      ) : sec.quoteStatus === "MANUAL" ? (
+                        <div className="inline-flex flex-col items-center">
+                          <span
+                            title={ageInfo.tooltip}
+                            className="inline-flex items-center gap-1 text-[11px] text-slate-600 font-medium cursor-help"
+                          >
+                            <Sliders className="w-3.5 h-3.5" />
+                            Manual
+                          </span>
+                          <span
+                            className={`text-[10px] mt-0.5 ${ageInfo.isDaysOld
+                                ? "text-amber-600 font-semibold"
+                                : "text-slate-400"
+                              }`}
+                          >
+                            {ageInfo.label}
+                          </span>
+                        </div>
                       ) : sec.quoteStatus === "ERROR" ? (
                         <div className="flex flex-col items-center">
                           <span
@@ -503,11 +567,10 @@ export function SecuritiesView({
                             title="Sync live quote from Yahoo Finance"
                           >
                             <RefreshCw
-                              className={`w-3.5 h-3.5 ${
-                                syncingId === sec.id
+                              className={`w-3.5 h-3.5 ${syncingId === sec.id
                                   ? "animate-spin text-blue-600"
                                   : ""
-                              }`}
+                                }`}
                             />
                           </button>
                         )}
@@ -656,7 +719,7 @@ export function SecuritiesView({
                   </span>
                   <button
                     type="button"
-                    disabled={isLookingUp || (!ticker && !providerSymbol)}
+                    disabled={isLookingUp || !ticker.trim()}
                     onClick={handleLookupOnYahoo}
                     className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-40 cursor-pointer"
                   >
@@ -669,7 +732,7 @@ export function SecuritiesView({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">
                       Quote Provider
@@ -684,21 +747,6 @@ export function SecuritiesView({
                       <option value="YAHOO">Yahoo Finance (Free)</option>
                       <option value="MANUAL">Manual Quote Only</option>
                     </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">
-                      Yahoo Feed Symbol
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ASML.AS, INVE-B.ST"
-                      value={providerSymbol}
-                      onChange={(e) =>
-                        setProviderSymbol(e.target.value.toUpperCase())
-                      }
-                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 uppercase focus:outline-none focus:border-blue-600"
-                    />
                   </div>
 
                   <div>

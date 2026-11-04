@@ -1,3 +1,5 @@
+import { mapToYahooTicker } from "./ticker-mapper";
+
 export interface YahooQuoteResult {
   symbol: string;
   regularMarketPrice: number;
@@ -9,47 +11,205 @@ export interface YahooQuoteResult {
   exchangeName: string | null;
 }
 
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
 /**
- * Normalizes Yahoo ticker symbol (e.g. cleans accidental colons or prefixes)
+ * Normalizes Yahoo ticker symbol. If a Google Finance colon-prefix is passed
+ * (e.g. 'STO:INVE-B' or 'AMS:ASML'), maps to proper Yahoo suffix ('INVE-B.ST', 'ASML.AS').
  */
 function cleanSymbol(symbol: string): string {
   const s = symbol.trim().toUpperCase();
   if (s.includes(":")) {
-    const parts = s.split(":");
-    return parts[1] || s;
+    return mapToYahooTicker(s).yahooTicker;
   }
   return s;
 }
 
 /**
- * Fetches live quote data from Yahoo Finance v8 chart API.
- * Uses clean headers to prevent Yahoo's bot rate-limiter (HTTP 429).
+ * Parses market quote directly from Yahoo Finance web page.
+ * This route is robust against the HTTP 429 rate-limiting that Yahoo applies
+ * to its unofficial v8/chart JSON endpoint.
+ */
+async function fetchFromYahooWeb(
+  targetSymbol: string
+): Promise<YahooQuoteResult> {
+  const url = `https://finance.yahoo.com/quote/${encodeURIComponent(targetSymbol)}/`;
+  const res = await fetch(url, {
+    headers: BROWSER_HEADERS,
+    cache: "no-store",
+    redirect: "follow",
+  });
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+
+  const html = await res.text();
+  const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)];
+
+  for (const s of scripts) {
+    if (s[1].includes("quoteResponse")) {
+      try {
+        const obj = JSON.parse(s[1]);
+        const body =
+          typeof obj.body === "string" ? JSON.parse(obj.body) : obj.body;
+        const results = body?.quoteResponse?.result || [];
+        const match = results.find(
+          (q: { symbol?: string }) =>
+            q.symbol?.toUpperCase() === targetSymbol.toUpperCase()
+        );
+
+        if (
+          match &&
+          (match.regularMarketPrice !== undefined ||
+            match.fulldayPrice !== undefined)
+        ) {
+          const rawPrice =
+            match.regularMarketPrice?.raw ??
+            match.regularMarketPrice ??
+            match.fulldayPrice?.raw ??
+            match.fulldayPrice;
+          const rawPrev =
+            match.regularMarketPreviousClose?.raw ??
+            match.regularMarketPreviousClose;
+
+          const numPrice = Number(rawPrice);
+          if (!Number.isNaN(numPrice) && numPrice > 0) {
+            return {
+              symbol: match.symbol || targetSymbol,
+              regularMarketPrice: numPrice,
+              previousClose:
+                rawPrev && !Number.isNaN(Number(rawPrev))
+                  ? Number(rawPrev)
+                  : null,
+              currency: match.currency
+                ? String(match.currency).toUpperCase()
+                : null,
+              shortName: match.shortName || null,
+              longName: match.longName || null,
+              sector: null,
+              exchangeName: match.fullExchangeName || match.exchange || null,
+            };
+          }
+        }
+      } catch {
+        // Continue searching other script tags
+      }
+    }
+  }
+
+  // Fallback: search regex in HTML for fin-streamer or data attributes
+  const priceMatch =
+    html.match(/data-field="regularMarketPrice"[^>]*data-value="([\d.]+)"/) ||
+    html.match(/data-field="regularMarketPrice"[^>]*value="([\d.]+)"/) ||
+    html.match(/data-value="([\d.]+)"[^>]*data-field="regularMarketPrice"/) ||
+    html.match(/"regularMarketPrice":\s*\{\s*"raw":\s*([\d.]+)/);
+
+  if (priceMatch) {
+    const numPrice = Number(priceMatch[1]);
+    if (!Number.isNaN(numPrice) && numPrice > 0) {
+      const prevMatch =
+        html.match(
+          /data-field="regularMarketPreviousClose"[^>]*data-value="([\d.]+)"/
+        ) ||
+        html.match(
+          /data-value="([\d.]+)"[^>]*data-field="regularMarketPreviousClose"/
+        );
+      return {
+        symbol: targetSymbol,
+        regularMarketPrice: numPrice,
+        previousClose:
+          prevMatch && !Number.isNaN(Number(prevMatch[1]))
+            ? Number(prevMatch[1])
+            : null,
+        currency: null,
+        shortName: null,
+        longName: null,
+        sector: null,
+        exchangeName: null,
+      };
+    }
+  }
+
+  throw new Error(`Quote data not found on Yahoo page for '${targetSymbol}'`);
+}
+
+/**
+ * Fetches live quote data from Yahoo Finance.
+ * Uses a primary web-scraping strategy with browser headers, and falls back to
+ * chart API and Frankfurter ECB (for Forex).
  */
 export async function fetchYahooQuote(
-  providerSymbol: string,
+  symbol: string,
   includeMetadata = false
 ): Promise<YahooQuoteResult> {
-  const targetSymbol = cleanSymbol(providerSymbol);
-  const encoded = encodeURIComponent(targetSymbol);
-
-  // Rotate between query1 and query2 hosts
-  const hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
-  let response: Response | null = null;
+  const targetSymbol = cleanSymbol(symbol);
   let lastError = "";
+
+  // 1. Primary Strategy: Yahoo Finance Web Quote Page (reliable against HTTP 429)
+  try {
+    const webResult = await fetchFromYahooWeb(targetSymbol);
+    return webResult;
+  } catch (err) {
+    lastError = err instanceof Error ? err.message : "Web page failed";
+  }
+
+  // 2. Secondary Strategy: Yahoo Finance v8 Chart API with browser headers
+  const encoded = encodeURIComponent(targetSymbol);
+  const hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
 
   for (const host of hosts) {
     try {
       const url = `https://${host}/v8/finance/chart/${encoded}?interval=1d&range=1d`;
       const res = await fetch(url, {
-        headers: {
-          Accept: "application/json",
-        },
+        headers: BROWSER_HEADERS,
         cache: "no-store",
       });
 
       if (res.ok) {
-        response = res;
-        break;
+        const data = await res.json();
+        const result = data?.chart?.result?.[0];
+        const meta = result?.meta;
+
+        if (
+          meta &&
+          meta.regularMarketPrice !== undefined &&
+          meta.regularMarketPrice !== null
+        ) {
+          const regularMarketPrice = Number(meta.regularMarketPrice);
+          if (!Number.isNaN(regularMarketPrice) && regularMarketPrice > 0) {
+            const previousClose =
+              meta.chartPreviousClose !== undefined &&
+                meta.chartPreviousClose !== null
+                ? Number(meta.chartPreviousClose)
+                : meta.previousClose !== undefined &&
+                  meta.previousClose !== null
+                  ? Number(meta.previousClose)
+                  : null;
+
+            return {
+              symbol: meta.symbol || targetSymbol,
+              regularMarketPrice,
+              previousClose:
+                previousClose && !Number.isNaN(previousClose)
+                  ? previousClose
+                  : null,
+              currency: meta.currency
+                ? String(meta.currency).toUpperCase()
+                : null,
+              shortName: meta.shortName || meta.longName || null,
+              longName: meta.longName || meta.shortName || null,
+              sector: null,
+              exchangeName: meta.fullExchangeName || meta.exchangeName || null,
+            };
+          }
+        }
       } else {
         lastError = `HTTP ${res.status}`;
       }
@@ -58,78 +218,31 @@ export async function fetchYahooQuote(
     }
   }
 
-  if (!response || !response.ok) {
-    throw new Error(
-      `Yahoo Finance lookup failed for '${targetSymbol}' (${lastError || "no response"})`
-    );
-  }
-
-  const data = await response.json();
-  const result = data?.chart?.result?.[0];
-  const meta = result?.meta;
-
-  if (!meta || meta.regularMarketPrice === undefined || meta.regularMarketPrice === null) {
-    throw new Error(
-      `No quote data found on Yahoo Finance for symbol '${targetSymbol}'. Please verify the provider symbol.`
-    );
-  }
-
-  const regularMarketPrice = Number(meta.regularMarketPrice);
-  if (Number.isNaN(regularMarketPrice) || regularMarketPrice <= 0) {
-    throw new Error(
-      `Invalid market price returned for '${targetSymbol}': ${meta.regularMarketPrice}`
-    );
-  }
-
-  const previousClose =
-    meta.chartPreviousClose !== undefined && meta.chartPreviousClose !== null
-      ? Number(meta.chartPreviousClose)
-      : meta.previousClose !== undefined && meta.previousClose !== null
-        ? Number(meta.previousClose)
-        : null;
-
-  let shortName: string | null = meta.shortName || meta.longName || null;
-  let longName: string | null = meta.longName || meta.shortName || null;
-  let sector: string | null = null;
-
-  // Attempt lightweight metadata search if requested
-  if (includeMetadata) {
-    try {
-      const searchUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encoded}&quotesCount=3&newsCount=0`;
-      const searchRes = await fetch(searchUrl, {
-        headers: { Accept: "application/json" },
-        cache: "no-store",
-      });
-      if (searchRes.ok) {
-        const searchData = await searchRes.json();
-        const quotes = searchData?.quotes || [];
-        const match =
-          quotes.find(
-            (q: { symbol?: string }) =>
-              q.symbol?.toUpperCase() === targetSymbol
-          ) || quotes[0];
-        if (match) {
-          shortName = match.shortname || shortName;
-          longName = match.longname || longName;
-          sector = normalizeGicsSector(match.sectorDisp || match.sector || null);
-        }
+  // 3. Fallback for Forex pairs (e.g. USDEUR=X, CADEUR=X) via Frankfurter ECB API
+  if (targetSymbol.endsWith("EUR=X")) {
+    const fromCcy = targetSymbol.replace("EUR=X", "");
+    if (fromCcy && fromCcy.length === 3) {
+      try {
+        const rate = await fetchFrankfurterFxToEur(fromCcy);
+        return {
+          symbol: targetSymbol,
+          regularMarketPrice: rate,
+          previousClose: null,
+          currency: "EUR",
+          shortName: `${fromCcy}/EUR`,
+          longName: `${fromCcy} to EUR Exchange Rate`,
+          sector: null,
+          exchangeName: "Frankfurter ECB",
+        };
+      } catch {
+        // proceed to throw
       }
-    } catch {
-      // Metadata enrichment is non-blocking
     }
   }
 
-  return {
-    symbol: meta.symbol || targetSymbol,
-    regularMarketPrice,
-    previousClose:
-      previousClose && !Number.isNaN(previousClose) ? previousClose : null,
-    currency: meta.currency ? String(meta.currency).toUpperCase() : null,
-    shortName,
-    longName,
-    sector,
-    exchangeName: meta.fullExchangeName || meta.exchangeName || null,
-  };
+  throw new Error(
+    `Failed to fetch live quote for '${targetSymbol}' from Yahoo Finance (${lastError || "no response"})`
+  );
 }
 
 /**
@@ -146,14 +259,19 @@ export async function fetchYahooBatchQuotes(
   for (const sym of unique) {
     try {
       const quote = await fetchYahooQuote(sym, false);
-      output[sym] = { result: quote };
+      const res = { result: quote };
+      output[sym] = res;
+      output[sym.toUpperCase()] = res;
+      output[quote.symbol.toUpperCase()] = res;
     } catch (err) {
-      output[sym] = {
+      const errRes = {
         error: err instanceof Error ? err.message : "Failed to fetch quote",
       };
+      output[sym] = errRes;
+      output[sym.toUpperCase()] = errRes;
     }
-    // Minimal 50ms pause between queries to avoid burst-limiting
-    await new Promise((r) => setTimeout(r, 60));
+    // Polite 80ms pause between queries
+    await new Promise((r) => setTimeout(r, 80));
   }
 
   return output;
@@ -229,30 +347,4 @@ export async function fetchAllFrankfurterRatesToEur(
     }
   }
   return result;
-}
-
-function normalizeGicsSector(rawSector: string | null): string | null {
-  if (!rawSector) return null;
-  const s = rawSector.trim();
-  const map: Record<string, string> = {
-    Technology: "Information Technology",
-    "Information Technology": "Information Technology",
-    "Financial Services": "Financials",
-    Financial: "Financials",
-    Financials: "Financials",
-    Energy: "Energy",
-    Industrials: "Industrials",
-    "Consumer Cyclical": "Consumer Discretionary",
-    "Consumer Discretionary": "Consumer Discretionary",
-    "Communication Services": "Communication Services",
-    "Basic Materials": "Materials",
-    Materials: "Materials",
-    Healthcare: "Health Care",
-    "Health Care": "Health Care",
-    "Consumer Defensive": "Consumer Staples",
-    "Consumer Staples": "Consumer Staples",
-    Utilities: "Utilities",
-    "Real Estate": "Real Estate",
-  };
-  return map[s] || s;
 }

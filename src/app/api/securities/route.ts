@@ -52,20 +52,17 @@ export async function POST(request: Request) {
     }
 
     const mapped = mapToYahooTicker(body.ticker, body.currency);
-    const providerSymbol = (
-      body.providerSymbol || mapped.yahooTicker
-    ).toUpperCase();
+    const unifiedTicker = (mapped.yahooTicker || mapped.rawTicker).toUpperCase();
 
     let created = upsertSecurity({
       ...body,
-      ticker: mapped.rawTicker,
-      providerSymbol,
+      ticker: unifiedTicker,
       currency: body.currency || mapped.inferredCurrency,
     });
 
     if (body.syncQuoteNow && created.quoteProvider === "YAHOO") {
       try {
-        const quote = await fetchYahooQuote(created.providerSymbol, true);
+        const quote = await fetchYahooQuote(created.ticker, true);
         created =
           updateSecurityById(created.id, {
             latestPrice: quote.regularMarketPrice,
@@ -76,7 +73,7 @@ export async function POST(request: Request) {
                 : created.name,
             gicsSector:
               (!body.gicsSector || body.gicsSector === "Uncategorized") &&
-              quote.sector
+                quote.sector
                 ? quote.sector
                 : created.gicsSector,
             currency: quote.currency || created.currency,

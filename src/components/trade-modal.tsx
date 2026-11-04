@@ -1,7 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, Calculator, Sparkles, RefreshCw, ShieldCheck } from "lucide-react";
+import {
+  X,
+  Calculator,
+  Sparkles,
+  RefreshCw,
+  ShieldCheck,
+  AlertTriangle,
+  Clock,
+} from "lucide-react";
 import type { ComputedTrade } from "@/lib/sepa-math";
 import type {
   NewTradeInput,
@@ -9,6 +17,7 @@ import type {
   ForexPairRecord,
 } from "@/lib/db/schema";
 import { mapToYahooTicker } from "@/lib/ticker-mapper";
+import { getQuoteAgeInfo } from "@/lib/quote-age";
 
 const GICS_SECTORS = [
   "Information Technology",
@@ -347,11 +356,20 @@ export function TradeModal({
     e.preventDefault();
     setSubmitting(true);
     try {
+      const selectedSec =
+        selectedSecurityId !== "NEW"
+          ? securities.find((s) => String(s.id) === selectedSecurityId)
+          : null;
+      const finalTicker = (
+        selectedSec?.ticker ||
+        parsedTicker.yahooTicker ||
+        ticker.trim()
+      ).toUpperCase();
+
       await onSubmit(
         {
-          securityId:
-            selectedSecurityId !== "NEW" ? Number(selectedSecurityId) : null,
-          ticker: ticker.trim().toUpperCase(),
+          securityId: selectedSec ? selectedSec.id : null,
+          ticker: finalTicker,
           gicsSector,
           currency,
           startDate,
@@ -388,9 +406,9 @@ export function TradeModal({
                   : "Add Trade"}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Yahoo Finance Symbol:{" "}
+              Ticker Symbol:{" "}
               <span className="font-mono font-semibold text-blue-600">
-                {parsedTicker.yahooTicker}
+                {ticker || parsedTicker.yahooTicker}
               </span>
             </p>
           </div>
@@ -473,7 +491,7 @@ export function TradeModal({
                   <span>
                     Currency: <strong className="text-slate-800">{currency}</strong> • Sector: <strong className="text-slate-800">{gicsSector}</strong>
                   </span>
-                  <span>Yahoo: <strong className="font-mono text-blue-600">{parsedTicker.yahooTicker}</strong></span>
+                  <span>Symbol: <strong className="font-mono text-blue-600">{ticker}</strong></span>
                 </div>
               )}
             </div>
@@ -600,14 +618,34 @@ export function TradeModal({
                   className="w-full bg-white border border-emerald-400 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-emerald-600"
                 />
               ) : (
-                <input
-                  type="number"
-                  step="any"
-                  placeholder="Uses Security Quote"
-                  value={manualLatestPrice}
-                  onChange={(e) => setManualLatestPrice(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
-                />
+                <div className="space-y-1">
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Uses Security Quote"
+                    value={manualLatestPrice}
+                    onChange={(e) => setManualLatestPrice(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
+                  />
+                  {initialTrade && initialTrade.lastQuoteAt && (
+                    (() => {
+                      const age = getQuoteAgeInfo(initialTrade.lastQuoteAt);
+                      return age.isDaysOld ? (
+                        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                          <span>
+                            Quote is {age.label} ({age.fullDate}) — Stale
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-slate-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          <span>Quote updated: {age.label}</span>
+                        </div>
+                      );
+                    })()
+                  )}
+                </div>
               )}
             </div>
 
@@ -625,9 +663,8 @@ export function TradeModal({
                     className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
                   >
                     <RefreshCw
-                      className={`w-2.5 h-2.5 ${
-                        fetchingFx ? "animate-spin" : ""
-                      }`}
+                      className={`w-2.5 h-2.5 ${fetchingFx ? "animate-spin" : ""
+                        }`}
                     />
                     ECB
                   </button>
@@ -698,9 +735,8 @@ export function TradeModal({
                 Initial Risk %
               </div>
               <div
-                className={`text-sm font-bold mt-0.5 ${
-                  previewRiskPct > 0.08 ? "text-rose-600" : "text-amber-600"
-                }`}
+                className={`text-sm font-bold mt-0.5 ${previewRiskPct > 0.08 ? "text-rose-600" : "text-amber-600"
+                  }`}
               >
                 {(previewRiskPct * 100).toFixed(2)}%
               </div>
@@ -726,9 +762,8 @@ export function TradeModal({
                 Projected R-Multiple
               </div>
               <div
-                className={`text-sm font-bold mt-0.5 ${
-                  previewR >= 0 ? "text-emerald-600" : "text-rose-600"
-                }`}
+                className={`text-sm font-bold mt-0.5 ${previewR >= 0 ? "text-emerald-600" : "text-rose-600"
+                  }`}
               >
                 {previewR >= 0 ? "+" : ""}
                 {previewR.toFixed(2)}R

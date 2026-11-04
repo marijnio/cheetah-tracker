@@ -42,10 +42,11 @@ export async function POST(request: Request) {
     if (body.lookupSymbol) {
       const mapped = mapToYahooTicker(body.lookupSymbol);
       const quote = await fetchYahooQuote(mapped.yahooTicker, true);
+      const resolvedTicker = quote.symbol || mapped.yahooTicker;
       return NextResponse.json({
         lookup: {
-          rawTicker: mapped.rawTicker,
-          providerSymbol: quote.symbol || mapped.yahooTicker,
+          ticker: resolvedTicker,
+          symbol: resolvedTicker,
           name: quote.longName || quote.shortName || mapped.symbol,
           gicsSector: quote.sector || "Uncategorized",
           currency: quote.currency || mapped.inferredCurrency,
@@ -79,15 +80,15 @@ export async function POST(request: Request) {
       scope === "FOREX_ONLY"
         ? []
         : allSec.filter((s) => {
-            if (s.quoteProvider === "MANUAL") return false;
-            if (scope === "OPEN_ONLY") return (s.openTradeCount ?? 0) > 0;
-            return true;
-          });
+          if (s.quoteProvider === "MANUAL") return false;
+          if (scope === "OPEN_ONLY") return (s.openTradeCount ?? 0) > 0;
+          return true;
+        });
 
     // Collect symbols
     const yahooFxPairs = fxPairs.filter((p) => p.liveProvider === "YAHOO");
     const symbolsToBatch = [
-      ...targetSec.map((s) => s.providerSymbol),
+      ...targetSec.map((s) => s.ticker),
       ...yahooFxPairs.map((p) => p.yahooSymbol),
     ];
 
@@ -106,7 +107,9 @@ export async function POST(request: Request) {
     // Update Forex pairs
     for (const pair of fxPairs) {
       if (pair.liveProvider === "MANUAL") continue;
-      const entry = batchResults[pair.yahooSymbol.toUpperCase()];
+      const entry =
+        batchResults[pair.yahooSymbol.toUpperCase()] ||
+        batchResults[pair.yahooSymbol];
       const ecbRate = frankfurterMap[pair.fromCurrency.toUpperCase()];
 
       if (entry?.result) {
@@ -137,7 +140,9 @@ export async function POST(request: Request) {
 
     // Update Securities
     for (const sec of targetSec) {
-      const entry = batchResults[sec.providerSymbol.toUpperCase()];
+      const entry =
+        batchResults[sec.ticker.toUpperCase()] ||
+        batchResults[sec.ticker];
       if (entry?.result) {
         updateSecurityById(sec.id, {
           latestPrice: entry.result.regularMarketPrice,
@@ -156,7 +161,7 @@ export async function POST(request: Request) {
           quoteStatus: "ERROR",
           quoteError: entry.error,
         });
-        errors.push({ symbol: sec.providerSymbol, error: entry.error });
+        errors.push({ symbol: sec.ticker, error: entry.error });
       }
     }
 

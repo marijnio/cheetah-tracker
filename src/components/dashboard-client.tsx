@@ -90,46 +90,44 @@ export function DashboardClient({
   );
   const [isImporting, setIsImporting] = useState(false);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const [hasMounted, setHasMounted] = useState(false);
   const [anchorValue, setAnchorValue] = useState<number>(50000);
   const [anchorPnl, setAnchorPnl] = useState<number>(initialKpis.totalGainLossEur);
   const [anchorUpdatedAt, setAnchorUpdatedAt] = useState<string | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
 
   React.useEffect(() => {
-    setHasMounted(true);
     if (typeof window !== "undefined") {
-          const loadFromStorage = () => {
-            const rawAnchor = localStorage.getItem("cheetah_account_anchor");
-            if (rawAnchor) {
-              try {
-                const parsed = JSON.parse(rawAnchor);
-                if (typeof parsed.value === "number" && !isNaN(parsed.value)) {
-                  setAnchorValue(parsed.value);
-                  setAnchorPnl(
-                    typeof parsed.pnlAtSet === "number"
-                      ? parsed.pnlAtSet
-                      : initialKpis.totalGainLossEur
-                  );
-                  setAnchorUpdatedAt(parsed.updatedAt || null);
-                  return;
-                }
-              } catch {
-                // fallback below
-              }
+      const loadFromStorage = () => {
+        const rawAnchor = localStorage.getItem("cheetah_account_anchor");
+        if (rawAnchor) {
+          try {
+            const parsed = JSON.parse(rawAnchor);
+            if (typeof parsed.value === "number" && !isNaN(parsed.value)) {
+              setAnchorValue(parsed.value);
+              setAnchorPnl(
+                typeof parsed.pnlAtSet === "number"
+                  ? parsed.pnlAtSet
+                  : initialKpis.totalGainLossEur
+              );
+              setAnchorUpdatedAt(parsed.updatedAt || null);
+              return;
             }
-            const savedEquity = localStorage.getItem("cheetah_account_equity");
-            if (savedEquity && !isNaN(Number(savedEquity)) && Number(savedEquity) > 0) {
-              setAnchorValue(Number(savedEquity));
-              setAnchorPnl(initialKpis.totalGainLossEur);
-            }
-          };
-
-          loadFromStorage();
-          window.addEventListener("storage", loadFromStorage);
-          return () => window.removeEventListener("storage", loadFromStorage);
+          } catch {
+            // fallback below
+          }
         }
-}, [initialKpis.totalGainLossEur]);
+        const savedEquity = localStorage.getItem("cheetah_account_equity");
+        if (savedEquity && !isNaN(Number(savedEquity)) && Number(savedEquity) > 0) {
+          setAnchorValue(Number(savedEquity));
+          setAnchorPnl(initialKpis.totalGainLossEur);
+        }
+      };
+
+      loadFromStorage();
+      window.addEventListener("storage", loadFromStorage);
+      return () => window.removeEventListener("storage", loadFromStorage);
+    }
+  }, [initialKpis.totalGainLossEur]);
 
   const handleSaveAccountValue = (newAccountValue: number) => {
     const nowIso = new Date().toISOString();
@@ -183,7 +181,6 @@ export function DashboardClient({
         if (
           !t.ticker.toLowerCase().includes(q) &&
           !(t.securityName && t.securityName.toLowerCase().includes(q)) &&
-          !t.yahooTicker.toLowerCase().includes(q) &&
           !t.gicsSector.toLowerCase().includes(q)
         ) {
           return false;
@@ -480,17 +477,13 @@ export function DashboardClient({
     currentTotalEquity > 0 ? (cashAvailable / currentTotalEquity) * 100 : 0;
 
   React.useEffect(() => {
-    if (hasMounted && typeof window !== "undefined") {
+    if (typeof window !== "undefined") {
       localStorage.setItem(
         "cheetah_account_equity",
         String(Math.round(currentTotalEquity))
       );
     }
-  }, [hasMounted, currentTotalEquity]);
-
-  if (!hasMounted) {
-    return <div className="min-h-screen bg-[#f8fafc]" />;
-  }
+  }, [currentTotalEquity]);
 
   const navMenuItems = [
     {
@@ -625,8 +618,8 @@ export function DashboardClient({
                   setIsMobileSidebarOpen(false);
                 }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${active
-                    ? "bg-blue-50 text-blue-700 font-bold shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  ? "bg-blue-50 text-blue-700 font-bold shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                   } ${isSidebarCollapsed ? "justify-center px-2" : ""}`}
                 title={item.label}
               >
@@ -713,6 +706,7 @@ export function DashboardClient({
                     <button
                       type="button"
                       onClick={() => setIsAccountModalOpen(true)}
+                      suppressHydrationWarning
                       className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 tabular-nums hover:text-blue-600 transition-colors text-left cursor-pointer group"
                       title="Anchored to your broker balance (auto-adjusts with new trade P&L). Click to recalibrate."
                     >
@@ -720,8 +714,8 @@ export function DashboardClient({
                     </button>
                     <span
                       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold tabular-nums ${isPositiveNet
-                          ? "bg-emerald-50 text-emerald-600"
-                          : "bg-rose-50 text-rose-500"
+                        ? "bg-emerald-50 text-emerald-600"
+                        : "bg-rose-50 text-rose-500"
                         }`}
                     >
                       {isPositiveNet ? (
@@ -827,15 +821,15 @@ export function DashboardClient({
                       key={tab.id}
                       onClick={() => setTradeFilter(tab.id)}
                       className={`pb-3 text-xs font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${active
-                          ? "border-blue-600 text-blue-600 font-semibold"
-                          : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
+                        ? "border-blue-600 text-blue-600 font-semibold"
+                        : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
                         }`}
                     >
                       <span>{tab.label}</span>
                       <span
                         className={`text-[11px] px-1.5 py-0.2 rounded-full tabular-nums ${active
-                            ? "bg-blue-50 text-blue-600 font-semibold"
-                            : "bg-slate-100 text-slate-500"
+                          ? "bg-blue-50 text-blue-600 font-semibold"
+                          : "bg-slate-100 text-slate-500"
                           }`}
                       >
                         {tab.count}
@@ -893,9 +887,21 @@ export function DashboardClient({
           ) : (
             <TradeTable
               trades={filteredTrades}
+              securities={securities}
               onToggleField={handleToggleField}
               onEditTrade={handleOpenEdit}
               onDeleteTrade={handleDeleteTrade}
+              onUpdateQuote={async (secId, price, provider) => {
+                await handleUpdateSecurity(secId, {
+                  latestPrice: price,
+                  ...(provider ? { quoteProvider: provider } : {}),
+                });
+              }}
+              onSyncSecurityQuote={async (secId) => {
+                await handleUpdateSecurity(secId, { syncQuote: true });
+              }}
+              onSyncAllOpenQuotes={() => handleBatchSync("OPEN_ONLY")}
+              isSyncingAll={isSyncingAll}
               sectorFilter={sectorFilter}
               onSectorFilterChange={setSectorFilter}
               searchQuery={searchQuery}

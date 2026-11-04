@@ -102,7 +102,7 @@ export function computeTradesWithMetrics(
     // Closed trades always use sellPrice (with fallback to manualLatestPrice or buyPrice)
     // Open trades use liveQuoteMap -> manualLatestPrice -> buyPrice
     const latestPrice = isOpen
-      ? (liveQuoteMap[trade.yahooTicker] ?? trade.manualLatestPrice ?? trade.buyPrice)
+      ? (liveQuoteMap[trade.ticker] ?? trade.manualLatestPrice ?? trade.buyPrice)
       : (trade.sellPrice ?? trade.manualLatestPrice ?? trade.buyPrice);
 
     const entryValueLocal = trade.shares * trade.buyPrice;
