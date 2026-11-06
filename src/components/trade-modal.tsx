@@ -18,8 +18,13 @@ import type {
   SecurityRecord,
   ForexPairRecord,
 } from "@/lib/db/schema";
-import { mapToYahooTicker, resolveTradingViewUrl } from "@/lib/ticker-mapper";
+import {
+  mapToYahooTicker,
+  resolveTradingViewUrl,
+  resolveYahooFinanceUrl,
+} from "@/lib/ticker-mapper";
 import { getQuoteAgeInfo } from "@/lib/quote-age";
+import { YahooFinanceIcon } from "./icons";
 
 const GICS_SECTORS = [
   "Information Technology",
@@ -489,20 +494,38 @@ export function TradeModal({
                     </span>
                   </span>
                   {(ticker || parsedTicker.yahooTicker) && (
-                    <a
-                      href={resolveTradingViewUrl(
-                        ticker || parsedTicker.yahooTicker,
-                        securities.find((s) => String(s.id) === selectedSecurityId)
-                          ?.tradingViewUrl ?? initialTrade?.tradingViewUrl
-                      )}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-600 text-[11px] font-semibold transition-colors"
-                      title="Open chart on TradingView"
-                    >
-                      <LineChart className="w-3 h-3" />
-                      <span>TradingView ↗</span>
-                    </a>
+                    <div className="inline-flex items-center gap-1.5 flex-wrap">
+                      <a
+                        href={resolveTradingViewUrl(
+                          ticker || parsedTicker.yahooTicker,
+                          securities.find((s) => String(s.id) === selectedSecurityId)
+                            ?.tradingViewUrl ?? initialTrade?.tradingViewUrl
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-600 text-[11px] font-semibold transition-colors"
+                        title="Open chart on TradingView"
+                      >
+                        <LineChart className="w-3 h-3" />
+                        <span>TradingView ↗</span>
+                      </a>
+                      <a
+                        href={resolveYahooFinanceUrl(
+                          ticker || parsedTicker.yahooTicker,
+                          currency ||
+                            securities.find(
+                              (s) => String(s.id) === selectedSecurityId
+                            )?.currency
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-semibold transition-colors"
+                        title="Open ticker on Yahoo Finance"
+                      >
+                        <YahooFinanceIcon className="w-3 h-3" />
+                        <span>Yahoo Finance ↗</span>
+                      </a>
+                    </div>
                   )}
                 </p>
               </div>

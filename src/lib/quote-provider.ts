@@ -1,3 +1,4 @@
+import YahooFinance from "yahoo-finance2";
 import { mapToYahooTicker } from "./ticker-mapper";
 
 export interface YahooQuoteResult {
@@ -11,13 +12,14 @@ export interface YahooQuoteResult {
   exchangeName: string | null;
 }
 
-const BROWSER_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-  Accept:
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-  "Accept-Language": "en-US,en;q=0.9",
-};
+const yahooFinance = new YahooFinance({
+  suppressNotices: ["yahooSurvey"],
+  versionCheck: false,
+  validation: {
+    logErrors: false,
+    logOptionsErrors: false,
+  },
+});
 
 /**
  * Normalizes Yahoo ticker symbol. If a Google Finance colon-prefix is passed
@@ -32,118 +34,147 @@ function cleanSymbol(symbol: string): string {
 }
 
 /**
- * Parses market quote directly from Yahoo Finance web page.
- * This route is robust against the HTTP 429 rate-limiting that Yahoo applies
- * to its unofficial v8/chart JSON endpoint.
+ * Maps Yahoo Finance sector names to standard GICS sectors used in the application.
  */
-async function fetchFromYahooWeb(
-  targetSymbol: string
-): Promise<YahooQuoteResult> {
-  const url = `https://finance.yahoo.com/quote/${encodeURIComponent(targetSymbol)}/`;
-  const res = await fetch(url, {
-    headers: BROWSER_HEADERS,
-    cache: "no-store",
-    redirect: "follow",
-  });
-
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
-  }
-
-  const html = await res.text();
-  const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)];
-
-  for (const s of scripts) {
-    if (s[1].includes("quoteResponse")) {
-      try {
-        const obj = JSON.parse(s[1]);
-        const body =
-          typeof obj.body === "string" ? JSON.parse(obj.body) : obj.body;
-        const results = body?.quoteResponse?.result || [];
-        const match = results.find(
-          (q: { symbol?: string }) =>
-            q.symbol?.toUpperCase() === targetSymbol.toUpperCase()
-        );
-
-        if (
-          match &&
-          (match.regularMarketPrice !== undefined ||
-            match.fulldayPrice !== undefined)
-        ) {
-          const rawPrice =
-            match.regularMarketPrice?.raw ??
-            match.regularMarketPrice ??
-            match.fulldayPrice?.raw ??
-            match.fulldayPrice;
-          const rawPrev =
-            match.regularMarketPreviousClose?.raw ??
-            match.regularMarketPreviousClose;
-
-          const numPrice = Number(rawPrice);
-          if (!Number.isNaN(numPrice) && numPrice > 0) {
-            return {
-              symbol: match.symbol || targetSymbol,
-              regularMarketPrice: numPrice,
-              previousClose:
-                rawPrev && !Number.isNaN(Number(rawPrev))
-                  ? Number(rawPrev)
-                  : null,
-              currency: match.currency
-                ? String(match.currency).toUpperCase()
-                : null,
-              shortName: match.shortName || null,
-              longName: match.longName || null,
-              sector: null,
-              exchangeName: match.fullExchangeName || match.exchange || null,
-            };
-          }
-        }
-      } catch {
-        // Continue searching other script tags
-      }
-    }
-  }
-
-  // Fallback: search regex in HTML for fin-streamer or data attributes
-  const priceMatch =
-    html.match(/data-field="regularMarketPrice"[^>]*data-value="([\d.]+)"/) ||
-    html.match(/data-field="regularMarketPrice"[^>]*value="([\d.]+)"/) ||
-    html.match(/data-value="([\d.]+)"[^>]*data-field="regularMarketPrice"/) ||
-    html.match(/"regularMarketPrice":\s*\{\s*"raw":\s*([\d.]+)/);
-
-  if (priceMatch) {
-    const numPrice = Number(priceMatch[1]);
-    if (!Number.isNaN(numPrice) && numPrice > 0) {
-      const prevMatch =
-        html.match(
-          /data-field="regularMarketPreviousClose"[^>]*data-value="([\d.]+)"/
-        ) ||
-        html.match(
-          /data-value="([\d.]+)"[^>]*data-field="regularMarketPreviousClose"/
-        );
-      return {
-        symbol: targetSymbol,
-        regularMarketPrice: numPrice,
-        previousClose:
-          prevMatch && !Number.isNaN(Number(prevMatch[1]))
-            ? Number(prevMatch[1])
-            : null,
-        currency: null,
-        shortName: null,
-        longName: null,
-        sector: null,
-        exchangeName: null,
-      };
-    }
-  }
-
-  throw new Error(`Quote data not found on Yahoo page for '${targetSymbol}'`);
+function normalizeGicsSector(rawSector: string | null | undefined): string | null {
+  if (!rawSector) return null;
+  const s = rawSector.trim();
+  const map: Record<string, string> = {
+    Technology: "Information Technology",
+    "Information Technology": "Information Technology",
+    "Financial Services": "Financials",
+    Financial: "Financials",
+    Financials: "Financials",
+    Energy: "Energy",
+    Industrials: "Industrials",
+    "Consumer Cyclical": "Consumer Discretionary",
+    "Consumer Discretionary": "Consumer Discretionary",
+    "Communication Services": "Communication Services",
+    "Basic Materials": "Materials",
+    Materials: "Materials",
+    Healthcare: "Health Care",
+    "Health Care": "Health Care",
+    "Consumer Defensive": "Consumer Staples",
+    "Consumer Staples": "Consumer Staples",
+    Utilities: "Utilities",
+    "Real Estate": "Real Estate",
+  };
+  return map[s] || s;
 }
 
 /**
- * Fetches live quote data from Yahoo Finance.
- * Uses a primary web-scraping strategy with browser headers, and falls back to
- * chart API and Frankfurter ECB (for Forex).
+ * Converts a raw quote object from yahoo-finance2 into a normalized YahooQuoteResult.
+ */
+function parseQuoteItem(
+  raw: Record<string, unknown>,
+  fallbackSymbol: string
+): YahooQuoteResult | null {
+  const rawPrice =
+    raw.regularMarketPrice ?? raw.fulldayPrice ?? raw.postMarketPrice;
+  const numPrice = Number(rawPrice);
+  if (Number.isNaN(numPrice) || numPrice <= 0) {
+    return null;
+  }
+
+  const rawPrev = raw.regularMarketPreviousClose;
+  const numPrev =
+    rawPrev !== undefined && rawPrev !== null && !Number.isNaN(Number(rawPrev))
+      ? Number(rawPrev)
+      : null;
+
+  return {
+    symbol: typeof raw.symbol === "string" ? raw.symbol : fallbackSymbol,
+    regularMarketPrice: numPrice,
+    previousClose: numPrev,
+    currency:
+      typeof raw.currency === "string" ? raw.currency.toUpperCase() : null,
+    shortName: typeof raw.shortName === "string" ? raw.shortName : null,
+    longName: typeof raw.longName === "string" ? raw.longName : null,
+    sector: normalizeGicsSector(
+      typeof raw.sector === "string" ? raw.sector : null
+    ),
+    exchangeName:
+      typeof raw.fullExchangeName === "string"
+        ? raw.fullExchangeName
+        : typeof raw.exchange === "string"
+          ? raw.exchange
+          : null,
+  };
+}
+
+/**
+ * Enriches quote result with company sector and name metadata via quoteSummary / search.
+ */
+async function enrichQuoteMetadata(
+  targetSymbol: string,
+  baseQuote: YahooQuoteResult
+): Promise<YahooQuoteResult> {
+  if (baseQuote.sector) return baseQuote;
+
+  // 1. Try quoteSummary (assetProfile / summaryProfile)
+  try {
+    const summary = (await yahooFinance.quoteSummary(
+      targetSymbol,
+      { modules: ["assetProfile", "summaryProfile"] },
+      { validateResult: false }
+    )) as Record<string, Record<string, unknown> | undefined> | undefined;
+
+    const rawSector =
+      (summary?.assetProfile?.sector as string | undefined) ||
+      (summary?.summaryProfile?.sector as string | undefined);
+    if (rawSector) {
+      return {
+        ...baseQuote,
+        sector: normalizeGicsSector(rawSector),
+      };
+    }
+  } catch {
+    // Fall through to search
+  }
+
+  // 2. Fallback to Yahoo search metadata
+  try {
+    const searchRes = (await yahooFinance.search(
+      targetSymbol,
+      { quotesCount: 5, newsCount: 0 },
+      { validateResult: false }
+    )) as { quotes?: Array<Record<string, unknown>> } | undefined;
+
+    const quotes = searchRes?.quotes || [];
+    const match =
+      quotes.find(
+        (q) =>
+          typeof q.symbol === "string" &&
+          q.symbol.toUpperCase() === targetSymbol.toUpperCase()
+      ) || quotes[0];
+
+    if (match) {
+      const rawSector =
+        (match.sectorDisp as string | undefined) ||
+        (match.sector as string | undefined) ||
+        null;
+      return {
+        ...baseQuote,
+        shortName:
+          baseQuote.shortName ||
+          (typeof match.shortname === "string" ? match.shortname : null),
+        longName:
+          baseQuote.longName ||
+          (typeof match.longname === "string" ? match.longname : null),
+        sector: normalizeGicsSector(rawSector) || baseQuote.sector,
+      };
+    }
+  } catch {
+    // Metadata enrichment is non-blocking
+  }
+
+  return baseQuote;
+}
+
+/**
+ * Fetches live quote data from Yahoo Finance using yahoo-finance2.
+ * Automatically manages Yahoo session cookies & crumbs, with fallback to chart
+ * and Frankfurter ECB (for Forex).
  */
 export async function fetchYahooQuote(
   symbol: string,
@@ -152,70 +183,89 @@ export async function fetchYahooQuote(
   const targetSymbol = cleanSymbol(symbol);
   let lastError = "";
 
-  // 1. Primary Strategy: Yahoo Finance Web Quote Page (reliable against HTTP 429)
+  // 1. Primary Strategy: yahoo-finance2 v7 quote (handles cookies/crumbs automatically)
   try {
-    const webResult = await fetchFromYahooWeb(targetSymbol);
-    return webResult;
+    const raw = (await yahooFinance.quote(
+      targetSymbol,
+      {},
+      { validateResult: false }
+    )) as Record<string, unknown> | undefined;
+
+    if (raw) {
+      const parsed = parseQuoteItem(raw, targetSymbol);
+      if (parsed) {
+        return includeMetadata
+          ? await enrichQuoteMetadata(targetSymbol, parsed)
+          : parsed;
+      }
+    }
+    lastError = `No quote data returned for '${targetSymbol}'`;
   } catch (err) {
-    lastError = err instanceof Error ? err.message : "Web page failed";
+    lastError = err instanceof Error ? err.message : "Quote request failed";
   }
 
-  // 2. Secondary Strategy: Yahoo Finance v8 Chart API with browser headers
-  const encoded = encodeURIComponent(targetSymbol);
-  const hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
+  // 2. Secondary Strategy: yahoo-finance2 v8 chart module
+  try {
+    const period1 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const chartData = (await yahooFinance.chart(
+      targetSymbol,
+      { period1, interval: "1d" },
+      { validateResult: false }
+    )) as { meta?: Record<string, unknown> } | undefined;
 
-  for (const host of hosts) {
-    try {
-      const url = `https://${host}/v8/finance/chart/${encoded}?interval=1d&range=1d`;
-      const res = await fetch(url, {
-        headers: BROWSER_HEADERS,
-        cache: "no-store",
-      });
+    const meta = chartData?.meta;
+    if (
+      meta &&
+      meta.regularMarketPrice !== undefined &&
+      meta.regularMarketPrice !== null
+    ) {
+      const regularMarketPrice = Number(meta.regularMarketPrice);
+      if (!Number.isNaN(regularMarketPrice) && regularMarketPrice > 0) {
+        const prevRaw = meta.chartPreviousClose ?? meta.previousClose;
+        const previousClose =
+          prevRaw !== undefined &&
+          prevRaw !== null &&
+          !Number.isNaN(Number(prevRaw))
+            ? Number(prevRaw)
+            : null;
 
-      if (res.ok) {
-        const data = await res.json();
-        const result = data?.chart?.result?.[0];
-        const meta = result?.meta;
-
-        if (
-          meta &&
-          meta.regularMarketPrice !== undefined &&
-          meta.regularMarketPrice !== null
-        ) {
-          const regularMarketPrice = Number(meta.regularMarketPrice);
-          if (!Number.isNaN(regularMarketPrice) && regularMarketPrice > 0) {
-            const previousClose =
-              meta.chartPreviousClose !== undefined &&
-                meta.chartPreviousClose !== null
-                ? Number(meta.chartPreviousClose)
-                : meta.previousClose !== undefined &&
-                  meta.previousClose !== null
-                  ? Number(meta.previousClose)
-                  : null;
-
-            return {
-              symbol: meta.symbol || targetSymbol,
-              regularMarketPrice,
-              previousClose:
-                previousClose && !Number.isNaN(previousClose)
-                  ? previousClose
-                  : null,
-              currency: meta.currency
-                ? String(meta.currency).toUpperCase()
+        const baseQuote: YahooQuoteResult = {
+          symbol:
+            typeof meta.symbol === "string" ? meta.symbol : targetSymbol,
+          regularMarketPrice,
+          previousClose,
+          currency:
+            typeof meta.currency === "string"
+              ? meta.currency.toUpperCase()
+              : null,
+          shortName:
+            typeof meta.shortName === "string"
+              ? meta.shortName
+              : typeof meta.longName === "string"
+                ? meta.longName
                 : null,
-              shortName: meta.shortName || meta.longName || null,
-              longName: meta.longName || meta.shortName || null,
-              sector: null,
-              exchangeName: meta.fullExchangeName || meta.exchangeName || null,
-            };
-          }
-        }
-      } else {
-        lastError = `HTTP ${res.status}`;
+          longName:
+            typeof meta.longName === "string"
+              ? meta.longName
+              : typeof meta.shortName === "string"
+                ? meta.shortName
+                : null,
+          sector: null,
+          exchangeName:
+            typeof meta.fullExchangeName === "string"
+              ? meta.fullExchangeName
+              : typeof meta.exchangeName === "string"
+                ? meta.exchangeName
+                : null,
+        };
+
+        return includeMetadata
+          ? await enrichQuoteMetadata(targetSymbol, baseQuote)
+          : baseQuote;
       }
-    } catch (e) {
-      lastError = e instanceof Error ? e.message : "Network error";
     }
+  } catch (err) {
+    lastError = err instanceof Error ? err.message : lastError;
   }
 
   // 3. Fallback for Forex pairs (e.g. USDEUR=X, CADEUR=X) via Frankfurter ECB API
@@ -246,7 +296,8 @@ export async function fetchYahooQuote(
 }
 
 /**
- * Fetches quotes for an array of symbols sequentially with a small delay to respect rate limits.
+ * Fetches quotes for an array of symbols in a single batch call via yahoo-finance2,
+ * falling back to individual lookups for any symbol missed in the batch.
  */
 export async function fetchYahooBatchQuotes(
   symbols: string[]
@@ -254,9 +305,47 @@ export async function fetchYahooBatchQuotes(
   const unique = Array.from(
     new Set(symbols.map(cleanSymbol).filter(Boolean))
   );
-  const output: Record<string, { result?: YahooQuoteResult; error?: string }> = {};
+  const output: Record<string, { result?: YahooQuoteResult; error?: string }> =
+    {};
 
-  for (const sym of unique) {
+  if (unique.length === 0) {
+    return output;
+  }
+
+  const resolvedSymbols = new Set<string>();
+
+  // 1. Batch fetch all symbols in a single Yahoo Finance request
+  try {
+    const rawList = (await yahooFinance.quote(
+      unique,
+      {},
+      { validateResult: false }
+    )) as Array<Record<string, unknown>> | undefined;
+
+    if (Array.isArray(rawList)) {
+      for (const raw of rawList) {
+        const sym = typeof raw?.symbol === "string" ? raw.symbol : "";
+        if (!sym) continue;
+        const parsed = parseQuoteItem(raw, sym);
+        if (parsed) {
+          const res = { result: parsed };
+          const upper = parsed.symbol.toUpperCase();
+          output[parsed.symbol] = res;
+          output[upper] = res;
+          resolvedSymbols.add(upper);
+        }
+      }
+    }
+  } catch {
+    // If the batch call fails, individual fallbacks below will handle each symbol
+  }
+
+  // 2. Fallback individually for any requested symbol not resolved in the batch
+  const missing = unique.filter(
+    (sym) => !resolvedSymbols.has(sym.toUpperCase())
+  );
+
+  for (const sym of missing) {
     try {
       const quote = await fetchYahooQuote(sym, false);
       const res = { result: quote };
@@ -270,8 +359,6 @@ export async function fetchYahooBatchQuotes(
       output[sym] = errRes;
       output[sym.toUpperCase()] = errRes;
     }
-    // Polite 80ms pause between queries
-    await new Promise((r) => setTimeout(r, 80));
   }
 
   return output;

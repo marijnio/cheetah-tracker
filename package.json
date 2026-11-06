@@ -15,7 +15,8 @@
     "papaparse": "^5.5.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.0.2"
+    "tailwind-merge": "^3.0.2",
+    "yahoo-finance2": "^4.0.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.9",

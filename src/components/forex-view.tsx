@@ -18,6 +18,8 @@ import type {
   NewForexPairInput,
   FxProviderType,
 } from "@/lib/db/schema";
+import { resolveYahooFinanceUrl } from "@/lib/ticker-mapper";
+import { YahooFinanceIcon } from "./icons";
 
 interface ForexViewProps {
   forexPairs: ForexPairRecord[];
@@ -250,7 +252,20 @@ export function ForexView({
                     </td>
 
                     <td className="py-3.5 px-3 font-mono font-semibold text-blue-600 whitespace-nowrap">
-                      {pair.yahooSymbol}
+                      <div className="flex items-center gap-1.5">
+                        <span>{pair.yahooSymbol}</span>
+                        {pair.yahooSymbol && (
+                          <a
+                            href={resolveYahooFinanceUrl(pair.yahooSymbol)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1 rounded text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                            title={`Open ${pair.yahooSymbol} on Yahoo Finance`}
+                          >
+                            <YahooFinanceIcon className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
                     </td>
 
                     <td className="py-3.5 px-3 whitespace-nowrap">
@@ -459,9 +474,23 @@ export function ForexView({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Yahoo FX Symbol
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-600">
+                      Yahoo FX Symbol
+                    </label>
+                    {yahooSymbol.trim() && (
+                      <a
+                        href={resolveYahooFinanceUrl(yahooSymbol)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-600 hover:text-purple-700"
+                        title="Open Yahoo Finance quote page"
+                      >
+                        <YahooFinanceIcon className="w-3 h-3" />
+                        <span>Yahoo Finance ↗</span>
+                      </a>
+                    )}
+                  </div>
                   <input
                     type="text"
                     placeholder="USDEUR=X"

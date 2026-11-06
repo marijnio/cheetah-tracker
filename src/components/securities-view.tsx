@@ -23,8 +23,13 @@ import type {
   NewSecurityInput,
   QuoteProviderType,
 } from "@/lib/db/schema";
-import { mapToYahooTicker, resolveTradingViewUrl } from "@/lib/ticker-mapper";
+import {
+  mapToYahooTicker,
+  resolveTradingViewUrl,
+  resolveYahooFinanceUrl,
+} from "@/lib/ticker-mapper";
 import { getQuoteAgeInfo } from "@/lib/quote-age";
+import { YahooFinanceIcon } from "./icons";
 
 const GICS_SECTORS = [
   "Information Technology",
@@ -413,6 +418,15 @@ export function SecuritiesView({
                         >
                           <LineChart className="w-3.5 h-3.5" />
                         </a>
+                        <a
+                          href={resolveYahooFinanceUrl(sec.ticker, sec.currency)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1 rounded text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                          title={`Open ${sec.ticker} on Yahoo Finance`}
+                        >
+                          <YahooFinanceIcon className="w-3.5 h-3.5" />
+                        </a>
                         {hasOpen && (
                           <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100 text-blue-700">
                             {sec.openTradeCount} OPEN
@@ -597,6 +611,15 @@ export function SecuritiesView({
                           }
                         >
                           <LineChart className="w-3.5 h-3.5" />
+                        </a>
+                        <a
+                          href={resolveYahooFinanceUrl(sec.ticker, sec.currency)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-colors cursor-pointer"
+                          title={`Open ${sec.ticker} on Yahoo Finance`}
+                        >
+                          <YahooFinanceIcon className="w-3.5 h-3.5" />
                         </a>
                         {sec.quoteProvider === "YAHOO" && (
                           <button
@@ -785,9 +808,23 @@ export function SecuritiesView({
               {/* Quote Provider Settings Box */}
               <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Quote Feed Settings
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Quote Feed Settings
+                    </span>
+                    {ticker.trim() && (
+                      <a
+                        href={resolveYahooFinanceUrl(ticker, currency)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-600 hover:text-purple-700"
+                        title="Open Yahoo Finance quote page"
+                      >
+                        <YahooFinanceIcon className="w-3 h-3" />
+                        <span>Yahoo Finance ↗</span>
+                      </a>
+                    )}
+                  </div>
                   <button
                     type="button"
                     disabled={isLookingUp || !ticker.trim()}

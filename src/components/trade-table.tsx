@@ -20,10 +20,10 @@ import {
   LineChart,
 } from "lucide-react";
 import type { ComputedTrade } from "@/lib/trade-math";
-import type { SecurityRecord, QuoteProviderType } from "@/lib/db/schema";
+import type { SecurityRecord } from "@/lib/db/schema";
 import { getQuoteAgeInfo } from "@/lib/quote-age";
-import { resolveTradingViewUrl } from "@/lib/ticker-mapper";
-import { QuickQuoteModal } from "./quick-quote-modal";
+import { resolveTradingViewUrl, resolveYahooFinanceUrl } from "@/lib/ticker-mapper";
+import { YahooFinanceIcon } from "./icons";
 
 interface TradeTableProps {
   trades: ComputedTrade[];
@@ -34,11 +34,6 @@ interface TradeTableProps {
   ) => Promise<void>;
   onEditTrade: (trade: ComputedTrade, mode?: "edit" | "close") => void;
   onDeleteTrade?: (trade: ComputedTrade) => Promise<void>;
-  onUpdateQuote?: (
-    securityId: number,
-    latestPrice: number,
-    quoteProvider?: QuoteProviderType
-  ) => Promise<void>;
   onSyncSecurityQuote?: (securityId: number) => Promise<void>;
   onSyncAllOpenQuotes?: () => Promise<void>;
   isSyncingAll?: boolean;
@@ -119,7 +114,6 @@ export function TradeTable({
   securities,
   onToggleField,
   onEditTrade,
-  onUpdateQuote,
   onSyncSecurityQuote,
   onSyncAllOpenQuotes,
   isSyncingAll,
@@ -137,9 +131,6 @@ export function TradeTable({
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const [selectedQuoteTrade, setSelectedQuoteTrade] =
-    useState<ComputedTrade | null>(null);
-  const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
   const [syncingSecurityId, setSyncingSecurityId] = useState<number | null>(
     null
   );
@@ -351,12 +342,21 @@ export function TradeTable({
                 </span>
               </th>
 
-              {/* 4. Latest / Exit Price */}
+              {/* 4. Latest Price (Exit price for closed trades) */}
               <th
                 onClick={() => handleSort("latestPrice")}
                 className="py-3.5 px-3 text-right cursor-pointer hover:text-slate-900 whitespace-nowrap"
+                title="Latest market price for open trades, exit price for closed trades"
               >
-                Latest / Exit {renderSortIcon("latestPrice")}
+                Latest Price {renderSortIcon("latestPrice")}
+              </th>
+
+              {/* 4b. 1D Change */}
+              <th
+                className="py-3.5 px-3 text-right whitespace-nowrap"
+                title="Today's change vs previous close (open trades only)"
+              >
+                1D Change
               </th>
 
               {/* 5. R-Multiple */}
@@ -445,7 +445,7 @@ export function TradeTable({
             {sortedTrades.length === 0 ? (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={11}
                   className="py-12 text-center text-slate-400 text-sm"
                 >
                   No trades match the current filters.
@@ -476,6 +476,10 @@ export function TradeTable({
                 const tvChartUrl = resolveTradingViewUrl(
                   trade.ticker,
                   customTvUrl
+                );
+                const yahooFinanceUrl = resolveYahooFinanceUrl(
+                  linkedSecurity?.ticker ?? trade.ticker,
+                  linkedSecurity?.currency ?? trade.currency
                 );
 
                 const previousClose =
@@ -555,6 +559,16 @@ export function TradeTable({
                           >
                             <LineChart className="w-3.5 h-3.5" />
                           </a>
+                          <a
+                            href={yahooFinanceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50/80 transition-all cursor-pointer"
+                            title={`Open ${trade.ticker} on Yahoo Finance`}
+                          >
+                            <YahooFinanceIcon className="w-3.5 h-3.5" />
+                          </a>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -632,336 +646,337 @@ export function TradeTable({
 
                     {/* 4. Latest / Exit Price */}
                     <td className="py-3 px-3 text-right whitespace-nowrap">
-                      {isOpen ? (
-                        <div className="flex flex-col items-end">
-                          <div className="inline-flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedQuoteTrade(trade);
-                                setIsQuoteModalOpen(true);
-                              }}
-                              className="text-blue-600 font-semibold cursor-pointer hover:underline decoration-blue-300"
-                              title="Click to view quote details or update manually"
+                      {(() => {
+                        const canSync =
+                          isOpen &&
+                          isYahoo &&
+                          !!onSyncSecurityQuote &&
+                          !!linkedSecurity;
+                        const isSyncingRow =
+                          !!linkedSecurity &&
+                          syncingSecurityId === linkedSecurity.id;
+                        const isError =
+                          isOpen && trade.quoteStatus === "ERROR";
+                        const isStale = isOpen && !isError && ageInfo.isDaysOld;
+
+                        const dotClass = !isOpen
+                          ? "bg-slate-300"
+                          : isError
+                            ? "bg-rose-500"
+                            : isStale
+                              ? "bg-amber-500"
+                              : "bg-emerald-500";
+
+                        const statusLabel = !isOpen
+                          ? "Exit"
+                          : isSyncingRow
+                            ? "Syncing…"
+                            : isError
+                              ? "Quote error"
+                              : ageInfo.label;
+
+                        const statusTitle = !isOpen
+                          ? `Exit price on ${trade.endDate ?? "close"}`
+                          : isError
+                            ? `${trade.quoteError || "Error fetching quote"}${canSync ? " — click to retry" : ""}`
+                            : `${ageInfo.tooltip}${canSync ? " — click to refresh" : ""}`;
+
+                        const statusContent = (
+                          <>
+                            {isSyncingRow ? (
+                              <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-500" />
+                            ) : (
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`}
+                              />
+                            )}
+                            <span>{statusLabel}</span>
+                            {canSync && !isSyncingRow && (
+                              <RefreshCw className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            )}
+                          </>
+                        );
+
+                        const statusClass = `inline-flex items-center gap-1 ${isError
+                          ? "text-rose-500"
+                          : isStale
+                            ? "text-amber-600"
+                            : "text-slate-400"
+                          }`;
+
+                        return (
+                          <div className="flex flex-col items-end">
+                            <span
+                              className={`font-semibold tabular-nums ${isOpen ? "text-slate-900" : "text-slate-700"
+                                }`}
                             >
                               {formatLocalPrice(
                                 trade.latestPrice,
                                 trade.currency
                               )}
-                            </button>
-                            {dayChangePct !== null && (
+                            </span>
+                              <div className="flex items-center justify-end text-[10px] mt-0.5">
+                                {canSync ? (
+                                  <button
+                                    type="button"
+                                    disabled={isSyncingRow}
+                                    onClick={() =>
+                                      handleSingleSyncQuote(linkedSecurity!.id)
+                                    }
+                                    className={`${statusClass} cursor-pointer hover:text-blue-600 disabled:cursor-wait`}
+                                    title={statusTitle}
+                                  >
+                                    {statusContent}
+                                  </button>
+                                ) : (
+                                  <span
+                                    className={`${statusClass} cursor-help`}
+                                    title={statusTitle}
+                                  >
+                                    {statusContent}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            );
+                      })()}
+                          </td>
+
+                    {/* 4b. 1D Change */ }
+                        <td className="py-3 px-3 text-right whitespace-nowrap">
+                          {isOpen && dayChangePct !== null ? (
+                            <div
+                              className="flex flex-col items-end"
+                              title={`1D change vs previous close (${formatLocalPrice(
+                                previousClose,
+                                trade.currency
+                              )})`}
+                            >
                               <span
-                                className={`px-1.5 py-0.2 rounded text-[10px] font-semibold tabular-nums ${dayChangePct >= 0
+                                className={`px-1.5 py-0.5 rounded text-[11px] font-semibold tabular-nums ${dayChangePct >= 0
                                   ? "bg-emerald-50 text-emerald-600"
                                   : "bg-rose-50 text-rose-500"
                                   }`}
-                                title={`Today's 1D change vs previous close (${formatLocalPrice(
-                                  previousClose,
-                                  trade.currency
-                                )}): ${dayDiff !== null && dayDiff > 0 ? "+" : ""
-                                  }${formatLocalPrice(
-                                    dayDiff,
-                                    trade.currency
-                                  )} (${dayChangePct >= 0 ? "+" : ""
-                                  }${dayChangePct.toFixed(2)}%)`}
                               >
                                 {dayChangePct >= 0 ? "+" : ""}
-                                {dayChangePct.toFixed(2)}% 1D
+                                {dayChangePct.toFixed(2)}%
+                              </span>
+                              <span className="text-[10px] text-slate-400 mt-0.5 tabular-nums">
+                                {dayDiff !== null && dayDiff > 0 ? "+" : ""}
+                                {formatLocalPrice(dayDiff, trade.currency)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+
+                        {/* 5. R-Multiple Pill (Primary Minervini Performance Metric) */ }
+                        < td className="py-3 px-3 text-center whitespace-nowrap border-l border-slate-100" >
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span
+                              className={`inline-block min-w-[54px] px-2 py-0.5 rounded-md text-[11px] ${getRMultiplePillStyle(
+                                trade.rMultiple
+                              )}`}
+                            >
+                              {trade.rMultiple > 0 ? "+" : ""}
+                              {trade.rMultiple.toFixed(2)}R
+                            </span>
+                            {isOpen && trade.stopMoved && (
+                              <span
+                                className="text-[9px] font-semibold uppercase tracking-wide text-blue-600/80"
+                                title="Stop moved to breakeven — initial capital risk removed"
+                              >
+                                Free Roll
                               </span>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedQuoteTrade(trade);
-                                setIsQuoteModalOpen(true);
-                              }}
-                              className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                              title="Update quote manually"
-                            >
-                              <Edit3 className="w-3 h-3" />
-                            </button>
-                            {isYahoo &&
-                              onSyncSecurityQuote &&
-                              linkedSecurity && (
-                                <button
-                                  type="button"
-                                  disabled={
-                                    syncingSecurityId === linkedSecurity.id
-                                  }
-                                  onClick={() =>
-                                    handleSingleSyncQuote(linkedSecurity.id)
-                                  }
-                                  className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                                  title="Refresh quote from Yahoo Finance"
-                                >
-                                  <RefreshCw
-                                    className={`w-3 h-3 ${syncingSecurityId === linkedSecurity.id
-                                      ? "animate-spin text-blue-600"
-                                      : ""
-                                      }`}
-                                  />
-                                </button>
-                              )}
                           </div>
+                        </td>
 
-                          {/* Recency Badge */}
-                          {ageInfo.isDaysOld ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedQuoteTrade(trade);
-                                setIsQuoteModalOpen(true);
-                              }}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 mt-0.5 cursor-pointer hover:bg-amber-100 transition-colors"
-                              title={ageInfo.tooltip}
-                            >
-                              <AlertTriangle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                              <span>{ageInfo.label} (Stale)</span>
-                            </button>
-                          ) : trade.quoteStatus === "ERROR" ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedQuoteTrade(trade);
-                                setIsQuoteModalOpen(true);
-                              }}
-                              className="inline-flex items-center gap-1 text-[10px] text-rose-500 font-medium mt-0.5 cursor-pointer hover:underline"
-                              title={trade.quoteError || "Error fetching quote"}
-                            >
-                              <AlertCircle className="w-2.5 h-2.5 shrink-0" />
-                              <span>Error</span>
-                            </button>
-                          ) : (
-                            <span
-                              className="text-[10px] text-slate-400 mt-0.5 inline-flex items-center gap-1 cursor-help"
-                              title={ageInfo.tooltip}
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                              <span>{ageInfo.label}</span>
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-end">
-                          <span className="text-slate-700 font-medium">
-                            {formatLocalPrice(
-                              trade.latestPrice,
+                        {/* 6. Trade Return % (+ Per-Share Delta) */ }
+                        <td className="py-3 px-2.5 text-right whitespace-nowrap">
+                          <div
+                            className="flex flex-col items-end"
+                            title={`Total trade return since entry at ${formatLocalPrice(
+                              trade.buyPrice,
                               trade.currency
-                            )}
-                          </span>
-                          <span className="text-[10px] text-slate-400 mt-0.5">
-                            Exit price
-                          </span>
-                        </div>
-                      )}
-                    </td>
-
-                    {/* 5. R-Multiple Pill (Primary Minervini Performance Metric) */}
-                    < td className="py-3 px-3 text-center whitespace-nowrap border-l border-slate-100" >
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span
-                          className={`inline-block min-w-[54px] px-2 py-0.5 rounded-md text-[11px] ${getRMultiplePillStyle(
-                            trade.rMultiple
-                          )}`}
-                        >
-                          {trade.rMultiple > 0 ? "+" : ""}
-                          {trade.rMultiple.toFixed(2)}R
-                        </span>
-                        {isOpen && trade.stopMoved && (
-                          <span
-                            className="text-[9px] font-semibold uppercase tracking-wide text-blue-600/80"
-                            title="Stop moved to breakeven — initial capital risk removed"
+                            )}: ${trade.gainLossPercent > 0 ? "+" : ""}${(
+                              trade.gainLossPercent * 100
+                            ).toFixed(2)}% (${perShareDiff > 0 ? "+" : ""
+                              }${formatLocalPrice(perShareDiff, trade.currency)}/share)`}
                           >
-                            Free Roll
-                          </span>
-                        )}
-                      </div>
-                    </td>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[11px] font-semibold tabular-nums ${isWinner
+                                ? "bg-emerald-50 text-emerald-600"
+                                : trade.gainLossPercent < 0
+                                  ? "bg-rose-50 text-rose-500"
+                                  : "bg-slate-100 text-slate-600"
+                                }`}
+                            >
+                              {trade.gainLossPercent > 0 ? "+" : ""}
+                              {(trade.gainLossPercent * 100).toFixed(2)}%
+                            </span>
+                            <span className="text-[10px] text-slate-400 mt-0.5">
+                              {perShareDiff > 0 ? "+" : ""}
+                              {formatLocalPrice(perShareDiff, trade.currency)}/sh
+                            </span>
+                          </div>
+                        </td>
 
-                    {/* 6. Trade Return % (+ Per-Share Delta) */}
-                    <td className="py-3 px-2.5 text-right whitespace-nowrap">
-                      <div
-                        className="flex flex-col items-end"
-                        title={`Total trade return since entry at ${formatLocalPrice(
-                          trade.buyPrice,
-                          trade.currency
-                        )}: ${trade.gainLossPercent > 0 ? "+" : ""}${(
-                          trade.gainLossPercent * 100
-                        ).toFixed(2)}% (${perShareDiff > 0 ? "+" : ""
-                          }${formatLocalPrice(perShareDiff, trade.currency)}/share)`}
-                      >
-                        <span
-                          className={`px-2 py-0.5 rounded text-[11px] font-semibold tabular-nums ${isWinner
-                            ? "bg-emerald-50 text-emerald-600"
-                            : trade.gainLossPercent < 0
-                              ? "bg-rose-50 text-rose-500"
-                              : "bg-slate-100 text-slate-600"
-                            }`}
-                        >
-                          {trade.gainLossPercent > 0 ? "+" : ""}
-                          {(trade.gainLossPercent * 100).toFixed(2)}%
-                        </span>
-                        <span className="text-[10px] text-slate-400 mt-0.5">
-                          {perShareDiff > 0 ? "+" : ""}
-                          {formatLocalPrice(perShareDiff, trade.currency)}/sh
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* 7. Profit / Loss € */}
-                    <td
-                      className="py-3 px-3 text-right whitespace-nowrap"
-                      title={
-                        trade.currency === "EUR"
-                          ? "EUR Base Currency (FX = 1.0000)"
-                          : `Entry (${trade.startDate}): ${formatEurValue(
-                            trade.entryValueEur
-                          )} @ FX ${trade.entryRateToEur.toFixed(4)}\n${isOpen ? "Latest (Live)" : `Exit (${trade.endDate})`
-                          }: ${formatEurValue(
-                            trade.latestValueEur
-                          )} @ FX ${trade.rateToEur.toFixed(4)}`
-                      }
-                    >
-                      <div
-                        className={`font-semibold ${trade.gainLossEur > 0
-                          ? "text-emerald-600"
-                          : trade.gainLossEur < 0
-                            ? "text-rose-500"
-                            : "text-slate-500"
-                          }`}
-                      >
-                        {formatEurValue(trade.gainLossEur, true)}
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        {trade.currency === "EUR"
-                          ? "FX: 1.0000"
-                          : Math.abs(trade.entryRateToEur - trade.rateToEur) >=
-                            0.00005
-                            ? `FX: ${trade.entryRateToEur.toFixed(4)} → ${trade.rateToEur.toFixed(4)}`
-                            : `FX: ${trade.rateToEur.toFixed(4)}`}
-                      </div>
-                    </td>
-
-                    {/* 8. 2R Target Price & % Distance Left */}
-                    <td className="py-3 px-3 text-right whitespace-nowrap border-l border-slate-100">
-                      <div
-                        className="text-slate-700 font-medium"
-                        title="2R Target Price: Buy Price × (1 + 2 × Initial Risk %)"
-                      >
-                        {formatLocalPrice(trade.moveStopAt, trade.currency)}
-                      </div>
-                      <div className="text-[11px] mt-0.5">
-                        {trade.percentLeftBeforeMove !== null ? (
-                          <span
-                            className={
-                              isNear2R
-                                ? "text-amber-600 font-semibold"
-                                : "text-slate-400"
-                            }
-                            title="Percentage gain needed from current/exit price to reach 2R"
-                          >
-                            {(trade.percentLeftBeforeMove * 100).toFixed(2)}%
-                            left
-                          </span>
-                        ) : hasReached2R ? (
-                          <span className="text-emerald-600 font-medium text-[10px]">
-                            ✓ 2R Reached
-                          </span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* 9. 2R Rules (Stop Moved & Trimmed at 2R Toggles) */}
-                    <td className="py-3 px-3 text-center whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => onToggleField(trade, "stopMoved")}
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer border ${trade.stopMoved
-                            ? "bg-blue-50 text-blue-700 border-blue-200/80"
-                            : needsStopAction
-                              ? "bg-amber-50/80 text-amber-700 border-amber-300 hover:bg-amber-100"
-                              : "bg-slate-50/60 text-slate-400 border-slate-200/60 hover:text-slate-600 hover:bg-slate-100"
-                            }`}
+                        {/* 7. Profit / Loss € */ }
+                        <td
+                          className="py-3 px-3 text-right whitespace-nowrap"
                           title={
-                            needsStopAction
-                              ? "2R reached! Click to mark Stop Moved to Breakeven"
-                              : "Toggle Stop Moved to Breakeven/2R"
+                            trade.currency === "EUR"
+                              ? "EUR Base Currency (FX = 1.0000)"
+                              : `Entry (${trade.startDate}): ${formatEurValue(
+                                trade.entryValueEur
+                              )} @ FX ${trade.entryRateToEur.toFixed(4)}\n${isOpen ? "Latest (Live)" : `Exit (${trade.endDate})`
+                              }: ${formatEurValue(
+                                trade.latestValueEur
+                              )} @ FX ${trade.rateToEur.toFixed(4)}`
                           }
                         >
-                          {trade.stopMoved ? (
-                            <CheckCircle2 className="w-3 h-3 text-blue-600 shrink-0" />
-                          ) : (
-                            <Circle className="w-3 h-3 shrink-0" />
-                          )}
-                          <span>Stop</span>
-                        </button>
-
-                        < button
-                          type="button"
-                          onClick={() => onToggleField(trade, "trimmedAt2R")}
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer border ${trade.trimmedAt2R
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                            : "bg-slate-50/60 text-slate-400 border-slate-200/60 hover:text-slate-600 hover:bg-slate-100"
-                            }`}
-                          title="Toggle Trimmed at 2R"
-                        >
-                          <Scissors
-                            className={`w-3 h-3 shrink-0 ${trade.trimmedAt2R ? "text-emerald-600" : ""
-                              }`}
-                          />
-                          <span>2R Trim</span>
-                        </button>
-                      </div>
-                    </td>
-
-                    {/* 10. Position Size € (Entry €, Latest €, Shares + Muted Sizing Bar) */}
-                    <td className="py-3 pl-3 pr-5 whitespace-nowrap border-l border-slate-100">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span
-                            className="text-slate-800 font-medium"
-                            title={`Entry Value: ${formatEurValue(
-                              trade.entryValueEur
-                            )} (${formatLocalPrice(
-                              trade.entryValueLocal,
-                              trade.currency
-                            )})`}
-                          >
-                            {formatEurValue(trade.entryValueEur)}
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-medium">
-                            {trade.shares.toLocaleString("en-US")} shs
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
-                          <span title="Latest / Exit Value in EUR">
-                            Now: {formatEurValue(trade.latestValueEur)}
-                          </span>
-                          {trade.currency !== "EUR" && (
-                            <span>
-                              {formatLocalPrice(
-                                trade.entryValueLocal,
-                                trade.currency
-                              )}
-                            </span>
-                          )}
-                        </div>
-                        <div
-                          className="w-full h-1 bg-slate-100 rounded-full overflow-hidden"
-                          title={`Relative entry position size (${Math.round(
-                            trade.entrySizePercentOfMax
-                          )}% of largest trade)`}
-                        >
                           <div
-                            className="h-full rounded-full bg-slate-300/90 group-hover:bg-slate-400 transition-colors"
-                            style={{ width: `${trade.entrySizePercentOfMax}%` }}
-                          />
-                        </div>
-                      </div>
-                    </td>
+                            className={`font-semibold ${trade.gainLossEur > 0
+                              ? "text-emerald-600"
+                              : trade.gainLossEur < 0
+                                ? "text-rose-500"
+                                : "text-slate-500"
+                              }`}
+                          >
+                            {formatEurValue(trade.gainLossEur, true)}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            {trade.currency === "EUR"
+                              ? "FX: 1.0000"
+                              : Math.abs(trade.entryRateToEur - trade.rateToEur) >=
+                                0.00005
+                                ? `FX: ${trade.entryRateToEur.toFixed(4)} → ${trade.rateToEur.toFixed(4)}`
+                                : `FX: ${trade.rateToEur.toFixed(4)}`}
+                          </div>
+                        </td>
+
+                        {/* 8. 2R Target Price & % Distance Left */ }
+                        <td className="py-3 px-3 text-right whitespace-nowrap border-l border-slate-100">
+                          <div
+                            className="text-slate-700 font-medium"
+                            title="2R Target Price: Buy Price × (1 + 2 × Initial Risk %)"
+                          >
+                            {formatLocalPrice(trade.moveStopAt, trade.currency)}
+                          </div>
+                          <div className="text-[11px] mt-0.5">
+                            {trade.percentLeftBeforeMove !== null ? (
+                              <span
+                                className={
+                                  isNear2R
+                                    ? "text-amber-600 font-semibold"
+                                    : "text-slate-400"
+                                }
+                                title="Percentage gain needed from current/exit price to reach 2R"
+                              >
+                                {(trade.percentLeftBeforeMove * 100).toFixed(2)}%
+                                left
+                              </span>
+                            ) : hasReached2R ? (
+                              <span className="text-emerald-600 font-medium text-[10px]">
+                                ✓ 2R Reached
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 9. 2R Rules (Stop Moved & Trimmed at 2R Toggles) */ }
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => onToggleField(trade, "stopMoved")}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer border ${trade.stopMoved
+                                ? "bg-blue-50 text-blue-700 border-blue-200/80"
+                                : needsStopAction
+                                  ? "bg-amber-50/80 text-amber-700 border-amber-300 hover:bg-amber-100"
+                                  : "bg-slate-50/60 text-slate-400 border-slate-200/60 hover:text-slate-600 hover:bg-slate-100"
+                                }`}
+                              title={
+                                needsStopAction
+                                  ? "2R reached! Click to mark Stop Moved to Breakeven"
+                                  : "Toggle Stop Moved to Breakeven/2R"
+                              }
+                            >
+                              {trade.stopMoved ? (
+                                <CheckCircle2 className="w-3 h-3 text-blue-600 shrink-0" />
+                              ) : (
+                                <Circle className="w-3 h-3 shrink-0" />
+                              )}
+                              <span>Stop</span>
+                            </button>
+
+                            < button
+                              type="button"
+                              onClick={() => onToggleField(trade, "trimmedAt2R")}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer border ${trade.trimmedAt2R
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                                : "bg-slate-50/60 text-slate-400 border-slate-200/60 hover:text-slate-600 hover:bg-slate-100"
+                                }`}
+                              title="Toggle Trimmed at 2R"
+                            >
+                              <Scissors
+                                className={`w-3 h-3 shrink-0 ${trade.trimmedAt2R ? "text-emerald-600" : ""
+                                  }`}
+                              />
+                              <span>2R Trim</span>
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* 10. Position Size € (Entry €, Latest €, Shares + Muted Sizing Bar) */ }
+                        <td className="py-3 pl-3 pr-5 whitespace-nowrap border-l border-slate-100">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span
+                                className="text-slate-800 font-medium"
+                                title={`Entry Value: ${formatEurValue(
+                                  trade.entryValueEur
+                                )} (${formatLocalPrice(
+                                  trade.entryValueLocal,
+                                  trade.currency
+                                )})`}
+                              >
+                                {formatEurValue(trade.entryValueEur)}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-medium">
+                                {trade.shares.toLocaleString("en-US")} shs
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                              <span title="Latest / Exit Value in EUR">
+                                Now: {formatEurValue(trade.latestValueEur)}
+                              </span>
+                              {trade.currency !== "EUR" && (
+                                <span>
+                                  {formatLocalPrice(
+                                    trade.entryValueLocal,
+                                    trade.currency
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                            <div
+                              className="w-full h-1 bg-slate-100 rounded-full overflow-hidden"
+                              title={`Relative entry position size (${Math.round(
+                                trade.entrySizePercentOfMax
+                              )}% of largest trade)`}
+                            >
+                              <div
+                                className="h-full rounded-full bg-slate-300/90 group-hover:bg-slate-400 transition-colors"
+                                style={{ width: `${trade.entrySizePercentOfMax}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
                   </tr>
                 );
               })
@@ -969,32 +984,6 @@ export function TradeTable({
           </tbody>
         </table>
       </div>
-
-      {/* Quick Quote Update Modal */}
-      < QuickQuoteModal
-        isOpen={isQuoteModalOpen}
-        onClose={() => {
-          setIsQuoteModalOpen(false);
-          setSelectedQuoteTrade(null);
-        }
-        }
-        trade={selectedQuoteTrade}
-        security={
-          selectedQuoteTrade
-            ? securities?.find(
-              (s) =>
-                s.id === selectedQuoteTrade.securityId ||
-                s.ticker === selectedQuoteTrade.ticker
-            ) || null
-            : null
-        }
-        onSaveQuote={async (secId, price, provider) => {
-          if (onUpdateQuote) {
-            await onUpdateQuote(secId, price, provider);
-          }
-        }}
-        onSyncLiveQuote={onSyncSecurityQuote}
-      />
     </div >
   );
 }

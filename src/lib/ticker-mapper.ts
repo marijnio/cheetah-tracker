@@ -186,4 +186,27 @@ export function resolveTradingViewUrl(
   )}`;
 }
 
+/**
+ * Resolves a Yahoo Finance quote page URL for a ticker or security.
+ * Uses `mapToYahooTicker` to resolve exchange suffixes (e.g. AMS:ASML -> ASML.AS, VWS with DKK -> VWS.CO).
+ */
+export function resolveYahooFinanceUrl(
+  ticker: string,
+  explicitCurrency?: string
+): string {
+  const trimmed = ticker?.trim();
+  if (!trimmed) {
+    return "https://finance.yahoo.com";
+  }
+
+  const mapped = mapToYahooTicker(trimmed, explicitCurrency);
+  const symbol = mapped.yahooTicker || trimmed;
+  const safeSymbol = encodeURIComponent(symbol)
+    .replace(/%3D/gi, "=")
+    .replace(/%5E/gi, "^");
+
+  return `https://finance.yahoo.com/quote/${safeSymbol}/`;
+}
+
+
 

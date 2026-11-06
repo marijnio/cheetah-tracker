@@ -907,12 +907,6 @@ export function DashboardClient({
               securities={securities}
               onToggleField={handleToggleField}
               onEditTrade={handleOpenEdit}
-              onUpdateQuote={async (secId, price, provider) => {
-                await handleUpdateSecurity(secId, {
-                  latestPrice: price,
-                  ...(provider ? { quoteProvider: provider } : {}),
-                });
-              }}
               onSyncSecurityQuote={async (secId) => {
                 await handleUpdateSecurity(secId, { syncQuote: true });
               }}
