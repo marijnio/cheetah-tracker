@@ -441,60 +441,40 @@ export function TradeTable({
                 P&amp;L € {renderSortIcon("gainLossEur")}
               </th>
 
-              {/* 8. 2R Target & Distance */}
-              <th className="py-3.5 px-3 text-right whitespace-nowrap border-l border-slate-200/60">
-                <span
-                  onClick={() => handleSort("moveStopAt")}
-                  className="cursor-pointer hover:text-slate-900"
-                  title="Sort by 2R Target Price: Buy Price × (1 + 2 × Initial Risk %)"
-                >
-                  2R Target {renderSortIcon("moveStopAt")}
-                </span>
-                <span className="text-slate-300 mx-1">/</span>
-                <span
-                  onClick={() => handleSort("percentLeftBeforeMove")}
-                  className="cursor-pointer hover:text-slate-900"
-                  title="Sort by % Distance Left to 2R"
-                >
-                  % Left {renderSortIcon("percentLeftBeforeMove")}
-                </span>
+              {/* 8. 2R Target (sorted by % left) */}
+              <th
+                onClick={() => handleSort("percentLeftBeforeMove")}
+                className="py-3.5 px-3 text-right cursor-pointer hover:text-slate-900 whitespace-nowrap border-l border-slate-200/60"
+                title="2R Target Price & distance. Click to sort by % distance left to 2R"
+              >
+                2R Target {renderSortIcon("percentLeftBeforeMove")}
               </th>
 
-              {/* 10. Position Size (Entry € / Latest € / Shares) */}
-              <th className="py-3.5 pl-3 pr-5 whitespace-nowrap border-l border-slate-200/60 min-w-[165px]">
-                <div className="flex items-center justify-between gap-1">
-                  <span
-                    onClick={() => handleSort("entryValueEur")}
-                    className="cursor-pointer hover:text-slate-900"
-                    title="Sort by Entry Value (€)"
-                  >
-                    Size € {renderSortIcon("entryValueEur")}
-                  </span>
-                  <span className="text-[10px] font-medium text-slate-400">
+                {/* 10. Position Size (Entry € / Latest €) */}
+                <th className="py-3.5 pl-3 pr-5 whitespace-nowrap border-l border-slate-200/60 min-w-[145px]">
+                  <div className="flex items-center justify-between gap-1">
                     <span
-                      onClick={() => handleSort("latestValueEur")}
-                      className="cursor-pointer hover:text-slate-800"
-                      title="Sort by Latest/Exit Value (€)"
+                      onClick={() => handleSort("entryValueEur")}
+                      className="cursor-pointer hover:text-slate-900"
+                      title="Sort by Entry Value (€)"
                     >
-                      Now {renderSortIcon("latestValueEur")}
+                      Size € {renderSortIcon("entryValueEur")}
                     </span>
-                    <span className="text-slate-300 mx-0.5">•</span>
-                    <span
-                      onClick={() => handleSort("shares")}
-                      className="cursor-pointer hover:text-slate-800"
-                      title="Sort by Shares"
-                    >
-                      Shs {renderSortIcon("shares")}
-                    </span>
-                  </span>
-                </div>
-              </th>
+                      <span
+                        onClick={() => handleSort("latestValueEur")}
+                        className="cursor-pointer hover:text-slate-800 text-[10px] font-medium text-slate-400"
+                        title="Sort by Current/Exit Value (€)"
+                      >
+                        Now {renderSortIcon("latestValueEur")}
+                      </span>
+                  </div>
+                </th>
 
-              {/* 11. Actions */}
-              <th className="py-3.5 px-3 text-center whitespace-nowrap border-l border-slate-200/60 w-12">
-                <span className="sr-only">Actions</span>
-                <MoreHorizontal className="w-4 h-4 mx-auto text-slate-400" />
-              </th>
+                {/* 11. Actions */}
+                <th className="py-3.5 px-3 text-center whitespace-nowrap border-l border-slate-200/60 w-12">
+                  <span className="sr-only">Actions</span>
+                  <MoreHorizontal className="w-4 h-4 mx-auto text-slate-400" />
+                </th>
             </tr>
           </thead>
 
@@ -574,616 +554,616 @@ export function TradeTable({
                         : "bg-white group-hover:bg-slate-50"
                         }`}
                     >
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-1.5 whitespace-nowrap">
-                              <span className="font-semibold text-blue-600 group-hover/ticker:text-blue-700 group-hover/ticker:underline decoration-blue-300 text-xs">
-                                {trade.ticker}
-                              </span>
-                              {trade.currency !== "USD" && (
-                                <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
-                                  {trade.currency}
-                                </span>
-                              )}
-                            </div>
-                            <div
-                              className="text-[11px] text-slate-500 mt-0.5 truncate w-0 min-w-full"
-                              title={
-                                trade.securityName &&
-                                  trade.securityName !== trade.ticker
-                                  ? `${trade.securityName} • ${trade.gicsSector}`
-                                  : trade.gicsSector
-                              }
-                            >
-                              {trade.securityName &&
-                                trade.securityName !== trade.ticker
-                                ? `${trade.securityName} • ${trade.gicsSector}`
-                                : trade.gicsSector}
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* 2. Timeline (Dates + Trading Days Held) */}
-                        <td className="py-3 px-3 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5 text-slate-700 font-medium">
-                            <span>{trade.startDate}</span>
-                            {isOpen ? (
-                              <span className="text-slate-400 font-normal text-[11px] inline-flex items-center gap-1">
-                                →
-                                <span className="px-1.5 py-0.2 rounded bg-blue-100 text-blue-700 font-semibold text-[10px]">
-                                  OPEN
-                                </span>
-                              </span>
-                            ) : trade.endDate ? (
-                              <span className="text-slate-400 font-normal text-[11px]">
-                                → {trade.endDate}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="flex items-center text-[11px] mt-0.5">
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-medium text-[10px]">
-                              <Clock className="w-2.5 h-2.5 text-slate-400" />
-                              {trade.tradingDaysHeld}d
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                          <span className="font-semibold text-blue-600 group-hover/ticker:text-blue-700 group-hover/ticker:underline decoration-blue-300 text-xs">
+                            {trade.ticker}
+                          </span>
+                          {trade.currency !== "USD" && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                              {trade.currency}
                             </span>
-                          </div>
-                        </td>
-
-                        {/* 3. Buy Price */}
-                        <td className="py-3 px-3 text-right whitespace-nowrap border-l border-slate-100">
-                          <div className="font-semibold text-slate-900 tabular-nums">
-                            {formatLocalPrice(trade.buyPrice, trade.currency)}
-                          </div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">
-                            Entry
-                          </div>
-                        </td>
-
-                        {/* 4. Initial Stop Loss & Risk % */}
-                        <td className="py-3 px-3 text-right whitespace-nowrap">
-                          <div
-                            className="font-medium text-slate-700 tabular-nums"
-                            title={`Initial Stop Loss Price: ${formatLocalPrice(
-                              trade.initialStopLoss,
-                              trade.currency
-                            )}`}
-                          >
-                            {formatLocalPrice(
-                              trade.initialStopLoss,
-                              trade.currency
-                            )}
-                          </div>
-                          <div className="text-[10px] mt-0.5">
-                            <span
-                              className={
-                                trade.initialRiskPercent > 0.075
-                                  ? "text-amber-600 font-semibold"
-                                  : "text-slate-500 font-medium tabular-nums"
-                              }
-                              title={
-                                trade.initialRiskPercent > 0.075
-                                  ? "Exceeds Minervini's 7.5%–8.0% maximum initial stop rule"
-                                  : "Initial risk % from buy price to stop loss"
-                              }
-                            >
-                              -{(trade.initialRiskPercent * 100).toFixed(1)}%
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* 4. Latest / Exit Price */}
-                        <td className="py-3 px-3 text-right whitespace-nowrap">
-                          {(() => {
-                            const canSync =
-                              isOpen &&
-                              isYahoo &&
-                              !!onSyncSecurityQuote &&
-                              !!linkedSecurity;
-                            const isSyncingRow =
-                              !!linkedSecurity &&
-                              syncingSecurityId === linkedSecurity.id;
-                            const isError =
-                              isOpen && trade.quoteStatus === "ERROR";
-                            const isStale = isOpen && !isError && ageInfo.isDaysOld;
-
-                            const dotClass = !isOpen
-                              ? "bg-slate-300"
-                              : isError
-                                ? "bg-rose-500"
-                                : isStale
-                                  ? "bg-amber-500"
-                                  : "bg-emerald-500";
-
-                            const statusLabel = !isOpen
-                              ? "Exit"
-                              : isSyncingRow
-                                ? "Syncing…"
-                                : isError
-                                  ? "Quote error"
-                                  : ageInfo.label;
-
-                            const statusTitle = !isOpen
-                              ? `Exit price on ${trade.endDate ?? "close"}`
-                              : isError
-                                ? `${trade.quoteError || "Error fetching quote"}${canSync ? " — click to retry" : ""}`
-                                : `${ageInfo.tooltip}${canSync ? " — click to refresh" : ""}`;
-
-                            const statusContent = (
-                              <>
-                                {isSyncingRow ? (
-                                  <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-500" />
-                                ) : (
-                                  <span
-                                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`}
-                                  />
-                                )}
-                                <span>{statusLabel}</span>
-                                {canSync && !isSyncingRow && (
-                                  <RefreshCw className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                )}
-                              </>
-                            );
-
-                            const statusClass = `inline-flex items-center gap-1 ${isError
-                              ? "text-rose-500"
-                              : isStale
-                                ? "text-amber-600"
-                                : "text-slate-400"
-                              }`;
-
-                            return (
-                              <div className="flex flex-col items-end">
-                                <span
-                                  className={`font-semibold tabular-nums ${isOpen ? "text-slate-900" : "text-slate-700"
-                                    }`}
-                                >
-                                  {formatLocalPrice(
-                                    trade.latestPrice,
-                                    trade.currency
-                                  )}
-                                </span>
-                                <div className="flex items-center justify-end text-[10px] mt-0.5">
-                                  {canSync ? (
-                                    <button
-                                      type="button"
-                                      disabled={isSyncingRow}
-                                      onClick={() =>
-                                        handleSingleSyncQuote(linkedSecurity!.id)
-                                      }
-                                      className={`${statusClass} cursor-pointer hover:text-blue-600 disabled:cursor-wait`}
-                                      title={statusTitle}
-                                    >
-                                      {statusContent}
-                                    </button>
-                                  ) : (
-                                    <span
-                                      className={`${statusClass} cursor-help`}
-                                      title={statusTitle}
-                                    >
-                                      {statusContent}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </td>
-
-                        {/* 4b. 1D Change */}
-                        <td className="py-3 px-3 text-right whitespace-nowrap">
-                          {isOpen && dayChangePct !== null ? (
-                            <div
-                              className="flex flex-col items-end"
-                              title={`1D change vs previous close (${formatLocalPrice(
-                                previousClose,
-                                trade.currency
-                              )})`}
-                            >
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[11px] font-semibold tabular-nums ${dayChangePct >= 0
-                                  ? "bg-emerald-50 text-emerald-600"
-                                  : "bg-rose-50 text-rose-500"
-                                  }`}
-                              >
-                                {dayChangePct >= 0 ? "+" : ""}
-                                {dayChangePct.toFixed(2)}%
-                              </span>
-                              <span className="text-[10px] text-slate-400 mt-0.5 tabular-nums">
-                                {dayDiff !== null && dayDiff > 0 ? "+" : ""}
-                                {formatLocalPrice(dayDiff, trade.currency)}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-300">—</span>
                           )}
-                        </td>
-
-                        {/* 5. R-Multiple Pill (Primary Minervini Performance Metric) */}
-                        < td className="py-3 px-3 text-center whitespace-nowrap border-l border-slate-100" >
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span
-                              className={`inline-block min-w-[54px] px-2 py-0.5 rounded-md text-[11px] ${getRMultiplePillStyle(
-                                trade.rMultiple
-                              )}`}
-                            >
-                              {trade.rMultiple > 0 ? "+" : ""}
-                              {trade.rMultiple.toFixed(2)}R
-                            </span>
-                            {isOpen && trade.stopMoved && (
-                              <span
-                                className="text-[9px] font-semibold uppercase tracking-wide text-blue-600/80"
-                                title="Stop moved to breakeven — initial capital risk removed"
-                              >
-                                Free Roll
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* 6. Trade Return % (+ Per-Share Delta) */}
-                        <td className="py-3 px-2.5 text-right whitespace-nowrap">
-                          <div
-                            className="flex flex-col items-end"
-                            title={`Total trade return since entry at ${formatLocalPrice(
-                              trade.buyPrice,
-                              trade.currency
-                            )}: ${trade.gainLossPercent > 0 ? "+" : ""}${(
-                              trade.gainLossPercent * 100
-                            ).toFixed(2)}% (${perShareDiff > 0 ? "+" : ""
-                              }${formatLocalPrice(perShareDiff, trade.currency)}/share)`}
-                          >
-                            <span
-                              className={`px-2 py-0.5 rounded text-[11px] font-semibold tabular-nums ${isWinner
-                                ? "bg-emerald-50 text-emerald-600"
-                                : trade.gainLossPercent < 0
-                                  ? "bg-rose-50 text-rose-500"
-                                  : "bg-slate-100 text-slate-600"
-                                }`}
-                            >
-                              {trade.gainLossPercent > 0 ? "+" : ""}
-                              {(trade.gainLossPercent * 100).toFixed(2)}%
-                            </span>
-                            <span className="text-[10px] text-slate-400 mt-0.5">
-                              {perShareDiff > 0 ? "+" : ""}
-                              {formatLocalPrice(perShareDiff, trade.currency)}/sh
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* 7. Profit / Loss € */}
-                        <td
-                          className="py-3 px-3 text-right whitespace-nowrap"
+                        </div>
+                        <div
+                          className="text-[11px] text-slate-500 mt-0.5 truncate w-0 min-w-full"
                           title={
-                            trade.currency === "EUR"
-                              ? "EUR Base Currency (FX = 1.0000)"
-                              : `Entry (${trade.startDate}): ${formatEurValue(
-                                trade.entryValueEur
-                              )} @ FX ${trade.entryRateToEur.toFixed(4)}\n${isOpen ? "Latest (Live)" : `Exit (${trade.endDate})`
-                              }: ${formatEurValue(
-                                trade.latestValueEur
-                              )} @ FX ${trade.rateToEur.toFixed(4)}`
+                            trade.securityName &&
+                              trade.securityName !== trade.ticker
+                              ? `${trade.securityName} • ${trade.gicsSector}`
+                              : trade.gicsSector
                           }
                         >
-                          <div
-                            className={`font-semibold ${trade.gainLossEur > 0
-                              ? "text-emerald-600"
-                              : trade.gainLossEur < 0
-                                ? "text-rose-500"
-                                : "text-slate-500"
-                              }`}
-                          >
-                            {formatEurValue(trade.gainLossEur, true)}
-                          </div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">
-                            {trade.currency === "EUR"
-                              ? "FX: 1.0000"
-                              : Math.abs(trade.entryRateToEur - trade.rateToEur) >=
-                                0.00005
-                                ? `FX: ${trade.entryRateToEur.toFixed(4)} → ${trade.rateToEur.toFixed(4)}`
-                                : `FX: ${trade.rateToEur.toFixed(4)}`}
-                          </div>
-                        </td>
+                          {trade.securityName &&
+                            trade.securityName !== trade.ticker
+                            ? `${trade.securityName} • ${trade.gicsSector}`
+                            : trade.gicsSector}
+                        </div>
+                      </div>
+                    </td>
 
-                        {/* 8. 2R Target */}
-                        <td className="py-3 px-3 text-right whitespace-nowrap border-l border-slate-100">
-                          <div
-                            className="font-medium text-slate-700 tabular-nums"
-                            title="2R Target Price: Buy Price × (1 + 2 × Initial Risk %)"
-                          >
-                            {formatLocalPrice(trade.moveStopAt, trade.currency)}
-                          </div>
-                          <div className="text-[10px] mt-0.5">
-                            {trade.percentLeftBeforeMove !== null && isOpen ? (
-                              <span
-                                className={`tabular-nums font-medium ${isNear2R
-                                    ? "text-amber-600 font-semibold"
-                                    : "text-slate-400"
-                                  }`}
-                                title="Percentage gain needed from current price to reach 2R"
-                              >
-                                {(trade.percentLeftBeforeMove * 100).toFixed(1)}% left
-                              </span>
-                            ) : hasReached2R ? (
-                              <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60">
-                                ✓ 2R Hit
-                              </span>
-                            ) : !isOpen ? (
-                              <span className="text-slate-400">Exit &lt; 2R</span>
+                    {/* 2. Timeline (Dates + Trading Days Held) */}
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                        <span>{trade.startDate}</span>
+                        {isOpen ? (
+                          <span className="text-slate-400 font-normal text-[11px] inline-flex items-center gap-1">
+                            →
+                            <span className="px-1.5 py-0.2 rounded bg-blue-100 text-blue-700 font-semibold text-[10px]">
+                              OPEN
+                            </span>
+                          </span>
+                        ) : trade.endDate ? (
+                          <span className="text-slate-400 font-normal text-[11px]">
+                            → {trade.endDate}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center text-[11px] mt-0.5">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-medium text-[10px]">
+                          <Clock className="w-2.5 h-2.5 text-slate-400" />
+                          {trade.tradingDaysHeld}d
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* 3. Buy Price */}
+                    <td className="py-3 px-3 text-right whitespace-nowrap border-l border-slate-100">
+                      <div className="font-semibold text-slate-900 tabular-nums">
+                        {formatLocalPrice(trade.buyPrice, trade.currency)}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        Entry
+                      </div>
+                    </td>
+
+                    {/* 4. Initial Stop Loss & Risk % */}
+                    <td className="py-3 px-3 text-right whitespace-nowrap">
+                      <div
+                        className="font-medium text-slate-700 tabular-nums"
+                        title={`Initial Stop Loss Price: ${formatLocalPrice(
+                          trade.initialStopLoss,
+                          trade.currency
+                        )}`}
+                      >
+                        {formatLocalPrice(
+                          trade.initialStopLoss,
+                          trade.currency
+                        )}
+                      </div>
+                      <div className="text-[10px] mt-0.5">
+                        <span
+                          className={
+                            trade.initialRiskPercent > 0.075
+                              ? "text-amber-600 font-semibold"
+                              : "text-slate-500 font-medium tabular-nums"
+                          }
+                          title={
+                            trade.initialRiskPercent > 0.075
+                              ? "Exceeds Minervini's 7.5%–8.0% maximum initial stop rule"
+                              : "Initial risk % from buy price to stop loss"
+                          }
+                        >
+                          -{(trade.initialRiskPercent * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* 4. Latest / Exit Price */}
+                    <td className="py-3 px-3 text-right whitespace-nowrap">
+                      {(() => {
+                        const canSync =
+                          isOpen &&
+                          isYahoo &&
+                          !!onSyncSecurityQuote &&
+                          !!linkedSecurity;
+                        const isSyncingRow =
+                          !!linkedSecurity &&
+                          syncingSecurityId === linkedSecurity.id;
+                        const isError =
+                          isOpen && trade.quoteStatus === "ERROR";
+                        const isStale = isOpen && !isError && ageInfo.isDaysOld;
+
+                        const dotClass = !isOpen
+                          ? "bg-slate-300"
+                          : isError
+                            ? "bg-rose-500"
+                            : isStale
+                              ? "bg-amber-500"
+                              : "bg-emerald-500";
+
+                        const statusLabel = !isOpen
+                          ? "Exit"
+                          : isSyncingRow
+                            ? "Syncing…"
+                            : isError
+                              ? "Quote error"
+                              : ageInfo.label;
+
+                        const statusTitle = !isOpen
+                          ? `Exit price on ${trade.endDate ?? "close"}`
+                          : isError
+                            ? `${trade.quoteError || "Error fetching quote"}${canSync ? " — click to retry" : ""}`
+                            : `${ageInfo.tooltip}${canSync ? " — click to refresh" : ""}`;
+
+                        const statusContent = (
+                          <>
+                            {isSyncingRow ? (
+                              <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-500" />
                             ) : (
-                              <span className="text-slate-300">—</span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* 10. Position Size € (Entry €, Latest €, Shares + Muted Sizing Bar) */}
-                        <td className="py-3 pl-3 pr-5 whitespace-nowrap border-l border-slate-100">
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-baseline justify-between gap-2">
                               <span
-                                className="text-slate-800 font-medium"
-                                title={`Entry Value: ${formatEurValue(
-                                  trade.entryValueEur
-                                )} (${formatLocalPrice(
-                                  trade.entryValueLocal,
-                                  trade.currency
-                                )})`}
-                              >
-                                {formatEurValue(trade.entryValueEur)}
-                              </span>
-                              <span className="text-[10px] text-slate-500 font-medium">
-                                {trade.shares.toLocaleString("en-US")} shs
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
-                              <span title="Latest / Exit Value in EUR">
-                                Now: {formatEurValue(trade.latestValueEur)}
-                              </span>
-                              {trade.currency !== "EUR" && (
-                                <span>
-                                  {formatLocalPrice(
-                                    trade.entryValueLocal,
-                                    trade.currency
-                                  )}
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`}
+                              />
+                            )}
+                            <span>{statusLabel}</span>
+                            {canSync && !isSyncingRow && (
+                              <RefreshCw className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            )}
+                          </>
+                        );
+
+                        const statusClass = `inline-flex items-center gap-1 ${isError
+                          ? "text-rose-500"
+                          : isStale
+                            ? "text-amber-600"
+                            : "text-slate-400"
+                          }`;
+
+                        return (
+                          <div className="flex flex-col items-end">
+                            <span
+                              className={`font-semibold tabular-nums ${isOpen ? "text-slate-900" : "text-slate-700"
+                                }`}
+                            >
+                              {formatLocalPrice(
+                                trade.latestPrice,
+                                trade.currency
+                              )}
+                            </span>
+                            <div className="flex items-center justify-end text-[10px] mt-0.5">
+                              {canSync ? (
+                                <button
+                                  type="button"
+                                  disabled={isSyncingRow}
+                                  onClick={() =>
+                                    handleSingleSyncQuote(linkedSecurity!.id)
+                                  }
+                                  className={`${statusClass} cursor-pointer hover:text-blue-600 disabled:cursor-wait`}
+                                  title={statusTitle}
+                                >
+                                  {statusContent}
+                                </button>
+                              ) : (
+                                <span
+                                  className={`${statusClass} cursor-help`}
+                                  title={statusTitle}
+                                >
+                                  {statusContent}
                                 </span>
                               )}
                             </div>
-                            <div
-                              className="w-full h-1 bg-slate-100 rounded-full overflow-hidden"
-                              title={`Relative entry position size (${Math.round(
-                                trade.entrySizePercentOfMax
-                              )}% of largest trade)`}
-                            >
-                              <div
-                                className="h-full rounded-full bg-slate-300/90 group-hover:bg-slate-400 transition-colors"
-                                style={{ width: `${trade.entrySizePercentOfMax}%` }}
-                              />
-                            </div>
                           </div>
-                        </td>
+                        );
+                      })()}
+                    </td>
 
-                        {/* 11. Actions Menu */}
-                        <td className="py-3 px-3 text-center whitespace-nowrap border-l border-slate-100 w-12">
-                          <button
-                            type="button"
-                            onClick={(e) => handleOpenMenu(trade, e)}
-                            className={`p-1.5 rounded-lg transition-all cursor-pointer relative ${menuTrade?.id === trade.id
-                                ? "bg-blue-100 text-blue-700 shadow-xs"
-                                : needsStopAction
-                                  ? "text-amber-600 hover:bg-amber-50 ring-1 ring-amber-300"
-                                  : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                    {/* 4b. 1D Change */}
+                    <td className="py-3 px-3 text-right whitespace-nowrap">
+                      {isOpen && dayChangePct !== null ? (
+                        <div
+                          className="flex flex-col items-end"
+                          title={`1D change vs previous close (${formatLocalPrice(
+                            previousClose,
+                            trade.currency
+                          )})`}
+                        >
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[11px] font-semibold tabular-nums ${dayChangePct >= 0
+                              ? "bg-emerald-50 text-emerald-600"
+                              : "bg-rose-50 text-rose-500"
                               }`}
-                            title={
-                              needsStopAction
-                                ? "2R Reached! Open menu to move stop to breakeven"
-                                : "Open trade actions menu"
-                            }
                           >
-                            <MoreHorizontal className="w-4 h-4" />
-                            {needsStopAction && (
-                              <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-                      );
+                            {dayChangePct >= 0 ? "+" : ""}
+                            {dayChangePct.toFixed(2)}%
+                          </span>
+                          <span className="text-[10px] text-slate-400 mt-0.5 tabular-nums">
+                            {dayDiff !== null && dayDiff > 0 ? "+" : ""}
+                            {formatLocalPrice(dayDiff, trade.currency)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+
+                    {/* 5. R-Multiple Pill (Primary Minervini Performance Metric) */}
+                    < td className="py-3 px-3 text-center whitespace-nowrap border-l border-slate-100" >
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span
+                          className={`inline-block min-w-[54px] px-2 py-0.5 rounded-md text-[11px] ${getRMultiplePillStyle(
+                            trade.rMultiple
+                          )}`}
+                        >
+                          {trade.rMultiple > 0 ? "+" : ""}
+                          {trade.rMultiple.toFixed(2)}R
+                        </span>
+                        {isOpen && trade.stopMoved && (
+                          <span
+                            className="text-[9px] font-semibold uppercase tracking-wide text-blue-600/80"
+                            title="Stop moved to breakeven — initial capital risk removed"
+                          >
+                            Free Roll
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* 6. Trade Return % (+ Per-Share Delta) */}
+                    <td className="py-3 px-2.5 text-right whitespace-nowrap">
+                      <div
+                        className="flex flex-col items-end"
+                        title={`Total trade return since entry at ${formatLocalPrice(
+                          trade.buyPrice,
+                          trade.currency
+                        )}: ${trade.gainLossPercent > 0 ? "+" : ""}${(
+                          trade.gainLossPercent * 100
+                        ).toFixed(2)}% (${perShareDiff > 0 ? "+" : ""
+                          }${formatLocalPrice(perShareDiff, trade.currency)}/share)`}
+                      >
+                        <span
+                          className={`px-2 py-0.5 rounded text-[11px] font-semibold tabular-nums ${isWinner
+                            ? "bg-emerald-50 text-emerald-600"
+                            : trade.gainLossPercent < 0
+                              ? "bg-rose-50 text-rose-500"
+                              : "bg-slate-100 text-slate-600"
+                            }`}
+                        >
+                          {trade.gainLossPercent > 0 ? "+" : ""}
+                          {(trade.gainLossPercent * 100).toFixed(2)}%
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">
+                          {perShareDiff > 0 ? "+" : ""}
+                          {formatLocalPrice(perShareDiff, trade.currency)}/sh
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* 7. Profit / Loss € */}
+                    <td
+                      className="py-3 px-3 text-right whitespace-nowrap"
+                      title={
+                        trade.currency === "EUR"
+                          ? "EUR Base Currency (FX = 1.0000)"
+                          : `Entry (${trade.startDate}): ${formatEurValue(
+                            trade.entryValueEur
+                          )} @ FX ${trade.entryRateToEur.toFixed(4)}\n${isOpen ? "Latest (Live)" : `Exit (${trade.endDate})`
+                          }: ${formatEurValue(
+                            trade.latestValueEur
+                          )} @ FX ${trade.rateToEur.toFixed(4)}`
+                      }
+                    >
+                      <div
+                        className={`font-semibold ${trade.gainLossEur > 0
+                          ? "text-emerald-600"
+                          : trade.gainLossEur < 0
+                            ? "text-rose-500"
+                            : "text-slate-500"
+                          }`}
+                      >
+                        {formatEurValue(trade.gainLossEur, true)}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {trade.currency === "EUR"
+                          ? "FX: 1.0000"
+                          : Math.abs(trade.entryRateToEur - trade.rateToEur) >=
+                            0.00005
+                            ? `FX: ${trade.entryRateToEur.toFixed(4)} → ${trade.rateToEur.toFixed(4)}`
+                            : `FX: ${trade.rateToEur.toFixed(4)}`}
+                      </div>
+                    </td>
+
+                    {/* 8. 2R Target */}
+                    <td className="py-3 px-3 text-right whitespace-nowrap border-l border-slate-100">
+                      <div
+                        className="font-medium text-slate-700 tabular-nums"
+                        title="2R Target Price: Buy Price × (1 + 2 × Initial Risk %)"
+                      >
+                        {formatLocalPrice(trade.moveStopAt, trade.currency)}
+                      </div>
+                      <div className="text-[10px] mt-0.5">
+                        {trade.percentLeftBeforeMove !== null && isOpen ? (
+                          <span
+                            className={`tabular-nums font-medium ${isNear2R
+                              ? "text-amber-600 font-semibold"
+                              : "text-slate-400"
+                              }`}
+                            title="Percentage gain needed from current price to reach 2R"
+                          >
+                            {(trade.percentLeftBeforeMove * 100).toFixed(1)}% left
+                          </span>
+                        ) : hasReached2R ? (
+                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/60">
+                            ✓ 2R Hit
+                          </span>
+                        ) : !isOpen ? (
+                          <span className="text-slate-400">Exit &lt; 2R</span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* 10. Position Size € (Entry €, Latest €, Shares + Muted Sizing Bar) */}
+                    <td className="py-3 pl-3 pr-5 whitespace-nowrap border-l border-slate-100">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span
+                            className="text-slate-800 font-medium"
+                            title={`Entry Value: ${formatEurValue(
+                              trade.entryValueEur
+                            )} (${formatLocalPrice(
+                              trade.entryValueLocal,
+                              trade.currency
+                            )})`}
+                          >
+                            {formatEurValue(trade.entryValueEur)}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            {trade.shares.toLocaleString("en-US")} shs
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                          <span title="Latest / Exit Value in EUR">
+                            Now: {formatEurValue(trade.latestValueEur)}
+                          </span>
+                          {trade.currency !== "EUR" && (
+                            <span>
+                              {formatLocalPrice(
+                                trade.entryValueLocal,
+                                trade.currency
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          className="w-full h-1 bg-slate-100 rounded-full overflow-hidden"
+                          title={`Relative entry position size (${Math.round(
+                            trade.entrySizePercentOfMax
+                          )}% of largest trade)`}
+                        >
+                          <div
+                            className="h-full rounded-full bg-slate-300/90 group-hover:bg-slate-400 transition-colors"
+                            style={{ width: `${trade.entrySizePercentOfMax}%` }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* 11. Actions Menu */}
+                    <td className="py-3 px-3 text-center whitespace-nowrap border-l border-slate-100 w-12">
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenMenu(trade, e)}
+                        className={`p-1.5 rounded-lg transition-all cursor-pointer relative ${menuTrade?.id === trade.id
+                          ? "bg-blue-100 text-blue-700 shadow-xs"
+                          : needsStopAction
+                            ? "text-amber-600 hover:bg-amber-50 ring-1 ring-amber-300"
+                            : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                          }`}
+                        title={
+                          needsStopAction
+                            ? "2R Reached! Open menu to move stop to breakeven"
+                            : "Open trade actions menu"
+                        }
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                        {needsStopAction && (
+                          <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                );
               })
             )}
-                    </tbody>
-                  </table>
-    </div>
+          </tbody>
+        </table>
+      </div>
 
-          {/* Floating Action Menu Popover */}
-          {menuTrade && menuPos && (() => {
-            const menuSecurity =
-              securities?.find(
-                (s) =>
-                  s.id === menuTrade.securityId || s.ticker === menuTrade.ticker
-              ) || null;
-            const menuTvUrl = resolveTradingViewUrl(
-              menuTrade.ticker,
-              menuSecurity?.tradingViewUrl ?? menuTrade.tradingViewUrl ?? null
-            );
-            const menuYahooUrl = resolveYahooFinanceUrl(
-              menuSecurity?.ticker ?? menuTrade.ticker,
-              menuSecurity?.currency ?? menuTrade.currency
-            );
-            const menuHasReached2R = menuTrade.latestPrice >= menuTrade.moveStopAt;
-            const menuNeedsStopAction =
-              menuTrade.isOpen && !menuTrade.stopMoved && menuHasReached2R;
+      {/* Floating Action Menu Popover */}
+      {menuTrade && menuPos && (() => {
+        const menuSecurity =
+          securities?.find(
+            (s) =>
+              s.id === menuTrade.securityId || s.ticker === menuTrade.ticker
+          ) || null;
+        const menuTvUrl = resolveTradingViewUrl(
+          menuTrade.ticker,
+          menuSecurity?.tradingViewUrl ?? menuTrade.tradingViewUrl ?? null
+        );
+        const menuYahooUrl = resolveYahooFinanceUrl(
+          menuSecurity?.ticker ?? menuTrade.ticker,
+          menuSecurity?.currency ?? menuTrade.currency
+        );
+        const menuHasReached2R = menuTrade.latestPrice >= menuTrade.moveStopAt;
+        const menuNeedsStopAction =
+          menuTrade.isOpen && !menuTrade.stopMoved && menuHasReached2R;
 
-            return (
-              <div
-                className="fixed z-50 bg-white border border-slate-200/90 rounded-xl shadow-xl py-1.5 w-56 text-xs animate-in fade-in zoom-in-95 duration-100 select-none divide-y divide-slate-100"
-                style={{
-                  top: menuPos.showAbove ? undefined : `${menuPos.top}px`,
-                  bottom: menuPos.showAbove
-                    ? `${window.innerHeight - menuPos.top}px`
-                    : undefined,
-                  right: `${menuPos.right}px`,
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Header */}
-                <div className="px-3 py-1.5 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-                    <span>{menuTrade.ticker}</span>
-                    {menuTrade.currency !== "USD" && (
-                      <span className="text-[10px] font-medium px-1 py-0.2 rounded bg-slate-100 text-slate-600">
-                        {menuTrade.currency}
-                      </span>
-                    )}
-                  </div>
-                  <span
-                    className={`text-[10px] font-semibold px-1.5 py-0.2 rounded ${menuTrade.isOpen
-                        ? "bg-blue-100 text-blue-700"
-                        : "bg-slate-100 text-slate-600"
-                      }`}
-                  >
-                    {menuTrade.isOpen ? "OPEN" : "CLOSED"}
+        return (
+          <div
+            className="fixed z-50 bg-white border border-slate-200/90 rounded-xl shadow-xl py-1.5 w-56 text-xs animate-in fade-in zoom-in-95 duration-100 select-none divide-y divide-slate-100"
+            style={{
+              top: menuPos.showAbove ? undefined : `${menuPos.top}px`,
+              bottom: menuPos.showAbove
+                ? `${window.innerHeight - menuPos.top}px`
+                : undefined,
+              right: `${menuPos.right}px`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-3 py-1.5 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                <span>{menuTrade.ticker}</span>
+                {menuTrade.currency !== "USD" && (
+                  <span className="text-[10px] font-medium px-1 py-0.2 rounded bg-slate-100 text-slate-600">
+                    {menuTrade.currency}
                   </span>
-                </div>
-
-                {/* External Links */}
-                <div className="py-1">
-                  <a
-                    href={menuTvUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => {
-                      setMenuTrade(null);
-                      setMenuPos(null);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-1.5 text-slate-700 hover:bg-blue-50/80 hover:text-blue-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <LineChart className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Open in TradingView</span>
-                    </div>
-                    <ExternalLink className="w-3 h-3 text-slate-400" />
-                  </a>
-
-                  <a
-                    href={menuYahooUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => {
-                      setMenuTrade(null);
-                      setMenuPos(null);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-1.5 text-slate-700 hover:bg-purple-50/80 hover:text-purple-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <YahooFinanceIcon className="w-3.5 h-3.5 text-purple-600" />
-                      <span>Open in Yahoo Finance</span>
-                    </div>
-                    <ExternalLink className="w-3 h-3 text-slate-400" />
-                  </a>
-                </div>
-
-                {/* 2R Discipline Rules */}
-                <div className="py-1">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const t = menuTrade;
-                      setMenuTrade(null);
-                      setMenuPos(null);
-                      await onToggleField(t, "stopMoved");
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-1.5 transition-colors cursor-pointer text-left ${menuTrade.stopMoved
-                        ? "bg-blue-50/60 text-blue-700 hover:bg-blue-100/70"
-                        : menuNeedsStopAction
-                          ? "bg-amber-50 text-amber-900 hover:bg-amber-100 font-medium"
-                          : "text-slate-700 hover:bg-slate-50"
-                      }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      {menuTrade.stopMoved ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
-                      ) : menuNeedsStopAction ? (
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-                      ) : (
-                        <Circle className="w-3.5 h-3.5 text-slate-400" />
-                      )}
-                      <span>Stop to Breakeven</span>
-                    </div>
-                    {menuTrade.stopMoved && (
-                      <span className="text-[10px] font-semibold text-blue-600">
-                        Active
-                      </span>
-                    )}
-                    {!menuTrade.stopMoved && menuNeedsStopAction && (
-                      <span className="text-[10px] font-semibold text-amber-600">
-                        2R Hit!
-                      </span>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const t = menuTrade;
-                      setMenuTrade(null);
-                      setMenuPos(null);
-                      await onToggleField(t, "trimmedAt2R");
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-1.5 transition-colors cursor-pointer text-left ${menuTrade.trimmedAt2R
-                        ? "bg-emerald-50/60 text-emerald-700 hover:bg-emerald-100/70"
-                        : "text-slate-700 hover:bg-slate-50"
-                      }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Scissors
-                        className={`w-3.5 h-3.5 ${menuTrade.trimmedAt2R
-                            ? "text-emerald-600"
-                            : "text-slate-400"
-                          }`}
-                      />
-                      <span>2R Trim (Take Profits)</span>
-                    </div>
-                    {menuTrade.trimmedAt2R && (
-                      <span className="text-[10px] font-semibold text-emerald-600">
-                        Trimmed
-                      </span>
-                    )}
-                  </button>
-                </div>
-
-                {/* Trade Management */}
-                <div className="py-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const t = menuTrade;
-                      setMenuTrade(null);
-                      setMenuPos(null);
-                      onEditTrade(t, "edit");
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer text-left"
-                  >
-                    <Edit3 className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Edit Trade Details</span>
-                  </button>
-
-                  {menuTrade.isOpen && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const t = menuTrade;
-                        setMenuTrade(null);
-                        setMenuPos(null);
-                        onEditTrade(t, "close");
-                      }}
-                      className="w-full flex items-center gap-2 px-3 py-1.5 text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer text-left font-medium"
-                    >
-                      <span className="w-3.5 h-3.5 flex items-center justify-center font-bold text-xs">
-                        →
-                      </span>
-                      <span>Close Position</span>
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
-            );
-          })()}
-      </div >
-      );
+              <span
+                className={`text-[10px] font-semibold px-1.5 py-0.2 rounded ${menuTrade.isOpen
+                  ? "bg-blue-100 text-blue-700"
+                  : "bg-slate-100 text-slate-600"
+                  }`}
+              >
+                {menuTrade.isOpen ? "OPEN" : "CLOSED"}
+              </span>
+            </div>
+
+            {/* External Links */}
+            <div className="py-1">
+              <a
+                href={menuTvUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  setMenuTrade(null);
+                  setMenuPos(null);
+                }}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-slate-700 hover:bg-blue-50/80 hover:text-blue-700 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <LineChart className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Open in TradingView</span>
+                </div>
+                <ExternalLink className="w-3 h-3 text-slate-400" />
+              </a>
+
+              <a
+                href={menuYahooUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  setMenuTrade(null);
+                  setMenuPos(null);
+                }}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-slate-700 hover:bg-purple-50/80 hover:text-purple-700 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <YahooFinanceIcon className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Open in Yahoo Finance</span>
+                </div>
+                <ExternalLink className="w-3 h-3 text-slate-400" />
+              </a>
+            </div>
+
+            {/* 2R Discipline Rules */}
+            <div className="py-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  const t = menuTrade;
+                  setMenuTrade(null);
+                  setMenuPos(null);
+                  await onToggleField(t, "stopMoved");
+                }}
+                className={`w-full flex items-center justify-between px-3 py-1.5 transition-colors cursor-pointer text-left ${menuTrade.stopMoved
+                  ? "bg-blue-50/60 text-blue-700 hover:bg-blue-100/70"
+                  : menuNeedsStopAction
+                    ? "bg-amber-50 text-amber-900 hover:bg-amber-100 font-medium"
+                    : "text-slate-700 hover:bg-slate-50"
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  {menuTrade.stopMoved ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                  ) : menuNeedsStopAction ? (
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+                  ) : (
+                    <Circle className="w-3.5 h-3.5 text-slate-400" />
+                  )}
+                  <span>Stop to Breakeven</span>
+                </div>
+                {menuTrade.stopMoved && (
+                  <span className="text-[10px] font-semibold text-blue-600">
+                    Active
+                  </span>
+                )}
+                {!menuTrade.stopMoved && menuNeedsStopAction && (
+                  <span className="text-[10px] font-semibold text-amber-600">
+                    2R Hit!
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const t = menuTrade;
+                  setMenuTrade(null);
+                  setMenuPos(null);
+                  await onToggleField(t, "trimmedAt2R");
+                }}
+                className={`w-full flex items-center justify-between px-3 py-1.5 transition-colors cursor-pointer text-left ${menuTrade.trimmedAt2R
+                  ? "bg-emerald-50/60 text-emerald-700 hover:bg-emerald-100/70"
+                  : "text-slate-700 hover:bg-slate-50"
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Scissors
+                    className={`w-3.5 h-3.5 ${menuTrade.trimmedAt2R
+                      ? "text-emerald-600"
+                      : "text-slate-400"
+                      }`}
+                  />
+                  <span>2R Trim (Take Profits)</span>
+                </div>
+                {menuTrade.trimmedAt2R && (
+                  <span className="text-[10px] font-semibold text-emerald-600">
+                    Trimmed
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Trade Management */}
+            <div className="py-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const t = menuTrade;
+                  setMenuTrade(null);
+                  setMenuPos(null);
+                  onEditTrade(t, "edit");
+                }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer text-left"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                <span>Edit Trade Details</span>
+              </button>
+
+              {menuTrade.isOpen && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = menuTrade;
+                    setMenuTrade(null);
+                    setMenuPos(null);
+                    onEditTrade(t, "close");
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer text-left font-medium"
+                >
+                  <span className="w-3.5 h-3.5 flex items-center justify-center font-bold text-xs">
+                    →
+                  </span>
+                  <span>Close Position</span>
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+    </div >
+  );
 }
