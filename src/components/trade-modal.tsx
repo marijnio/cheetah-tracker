@@ -486,7 +486,7 @@ export function TradeModal({
                   ? `Edit Trade: ${initialTrade.ticker}`
                   : "Add Trade"}
             </h2>
-                <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
+                <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
                   <span>
                     Ticker Symbol:{" "}
                     <span className="font-mono font-semibold text-blue-600">
@@ -494,7 +494,7 @@ export function TradeModal({
                     </span>
                   </span>
                   {(ticker || parsedTicker.yahooTicker) && (
-                    <div className="inline-flex items-center gap-1.5 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 flex-wrap">
                       <a
                         href={resolveTradingViewUrl(
                           ticker || parsedTicker.yahooTicker,
@@ -525,9 +525,9 @@ export function TradeModal({
                         <YahooFinanceIcon className="w-3 h-3" />
                         <span>Yahoo Finance ↗</span>
                       </a>
-                    </div>
+                    </span>
                   )}
-                </p>
+                </div>
               </div>
               <button
                 onClick={onClose}

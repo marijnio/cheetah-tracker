@@ -6,7 +6,6 @@ import {
   ArrowUp,
   ArrowDown,
   Search,
-  Edit3,
   CheckCircle2,
   Circle,
   Scissors,
@@ -299,7 +298,7 @@ export function TradeTable({
               {/* 1. Ticker */}
               <th
                 onClick={() => handleSort("ticker")}
-                className="py-3.5 pl-5 pr-4 cursor-pointer hover:text-slate-900 whitespace-nowrap sticky left-0 bg-[#f8fafc] z-20 shadow-[1px_0_0_0_#e2e8f0]"
+                className="py-3.5 pl-4 pr-3 cursor-pointer hover:text-slate-900 whitespace-nowrap sticky left-0 bg-[#f8fafc] z-20 shadow-[1px_0_0_0_#e2e8f0]"
               >
                 Ticker {renderSortIcon("ticker")}
               </th>
@@ -512,13 +511,13 @@ export function TradeTable({
                     <td
                       onClick={() => onEditTrade(trade, "edit")}
                       title="Click to edit trade"
-                      className={`py-3 pl-5 pr-4 whitespace-nowrap sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] cursor-pointer group/ticker ${isOpen
+                      className={`py-3 pl-4 pr-3 whitespace-nowrap sticky left-0 z-10 shadow-[1px_0_0_0_#e2e8f0] cursor-pointer group/ticker ${isOpen
                         ? "bg-[#f5f9ff] group-hover:bg-[#ebf3fe]"
                         : "bg-white group-hover:bg-slate-50"
                         }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="font-semibold text-blue-600 group-hover/ticker:text-blue-700 group-hover/ticker:underline decoration-blue-300 text-xs">
                               {trade.ticker}
@@ -529,12 +528,20 @@ export function TradeTable({
                               </span>
                             )}
                             {isOpen && (
-                              <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100 text-blue-700">
+                              <span className="text-[9px] font-semibold px-1 py-0.2 rounded bg-blue-100 text-blue-700">
                                 OPEN
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5 max-w-[190px] truncate">
+                          <div
+                            className="text-[11px] text-slate-500 mt-0.5 max-w-[150px] truncate"
+                            title={
+                              trade.securityName &&
+                                trade.securityName !== trade.ticker
+                                ? `${trade.securityName} • ${trade.gicsSector}`
+                                : trade.gicsSector
+                            }
+                          >
                             {trade.securityName &&
                               trade.securityName !== trade.ticker
                               ? `${trade.securityName} • ${trade.gicsSector}`
@@ -547,7 +554,7 @@ export function TradeTable({
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className={`p-1.5 rounded-lg transition-all cursor-pointer ${customTvUrl
+                            className={`p-1 rounded transition-all cursor-pointer ${customTvUrl
                               ? "text-blue-600 hover:bg-blue-50/90"
                               : "text-slate-400 hover:text-blue-600 hover:bg-blue-50/80"
                               }`}
@@ -564,22 +571,11 @@ export function TradeTable({
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50/80 transition-all cursor-pointer"
+                            className="p-1 rounded text-slate-400 hover:text-purple-600 hover:bg-purple-50/80 transition-all cursor-pointer"
                             title={`Open ${trade.ticker} on Yahoo Finance`}
                           >
                             <YahooFinanceIcon className="w-3.5 h-3.5" />
                           </a>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onEditTrade(trade, "edit");
-                            }}
-                            className="p-1.5 rounded-lg text-slate-400 opacity-0 group-hover:opacity-100 hover:text-blue-600 hover:bg-blue-50/80 transition-all cursor-pointer"
-                            title="Edit Trade"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
                         </div>
                       </div>
                     </td>
