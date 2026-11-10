@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       csvContent?: string;
       useSampleCsv?: boolean;
       replaceExisting?: boolean;
+      parseOnly?: boolean;
     };
 
     let csvText = body.csvContent || "";
@@ -52,6 +53,13 @@ export async function POST(request: Request) {
         { error: "No valid trade rows found in CSV" },
         { status: 400 }
       );
+    }
+
+    if (body.parseOnly) {
+      return NextResponse.json({
+        importedCount: parsedItems.length,
+        parsedItems,
+      });
     }
 
     const importedCount = bulkInsertTrades(

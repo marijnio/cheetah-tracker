@@ -1,31 +1,23 @@
 import React from "react";
-import {
-  getAllTrades,
-  getAllSecurities,
-  getAllForexPairs,
-  getLiveQuoteMap,
-  getLiveFxMap,
-} from "@/lib/db";
+import { getAllForexPairs, getLiveFxMap } from "@/lib/db";
 import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 import { DashboardClient } from "@/components/dashboard-client";
 
 export const dynamic = "force-dynamic";
 
 export default function HomePage() {
-  const rawTrades = getAllTrades();
-  const quoteMap = getLiveQuoteMap();
   const fxMap = getLiveFxMap();
-
-  const trades = computeTradesWithMetrics(rawTrades, quoteMap, fxMap);
-  const kpis = computePortfolioKPIs(trades);
-  const securities = getAllSecurities();
   const forexPairs = getAllForexPairs();
+
+  // Clean empty initial state: no sample trades, no sample securities
+  const trades = computeTradesWithMetrics([], {}, fxMap);
+  const kpis = computePortfolioKPIs(trades);
 
   return (
     <DashboardClient
-      initialTrades={trades}
+      initialTrades={[]}
       initialKpis={kpis}
-      initialSecurities={securities}
+      initialSecurities={[]}
       initialForexPairs={forexPairs}
     />
   );

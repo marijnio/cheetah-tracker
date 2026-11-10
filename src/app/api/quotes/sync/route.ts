@@ -36,6 +36,10 @@ export async function POST(request: Request) {
       scope?: "OPEN_ONLY" | "ALL_SECURITIES" | "FOREX_ONLY";
       lookupSymbol?: string;
       lookupHistoricalFx?: { fromCurrency: string; date: string };
+      statelessBatch?: {
+        symbols?: string[];
+        forexCurrencies?: string[];
+      };
     };
 
     // 1. Single symbol metadata lookup (used in Security Modal / Trade Modal)
@@ -65,6 +69,26 @@ export async function POST(request: Request) {
         date || "latest"
       );
       return NextResponse.json({ rateToEur: rate });
+    }
+
+    // 3. Stateless batch quote & FX sync for browser-local portfolio mode
+    if (body.statelessBatch) {
+      const symbols = body.statelessBatch.symbols || [];
+      const forexCurrencies = body.statelessBatch.forexCurrencies || [];
+      const batchResults = await fetchYahooBatchQuotes(symbols);
+      let frankfurterMap: Record<string, number> = {};
+      if (forexCurrencies.length > 0) {
+        try {
+          frankfurterMap = await fetchAllFrankfurterRatesToEur(forexCurrencies);
+        } catch {
+          // Non-blocking fallback
+        }
+      }
+      return NextResponse.json({
+        batchResults,
+        frankfurterMap,
+        timestamp: new Date().toISOString(),
+      });
     }
 
     // 3. Batch sync for Forex pairs + Securities

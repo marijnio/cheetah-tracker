@@ -208,7 +208,8 @@ function ensureSchemaAndSeed(db: DatabaseSync): void {
     );
   }
 
-  // 2. Auto-seed sample CSV trades if trades table is empty
+  // Auto-seeding disabled: App starts empty unless user loads an XML or CSV file
+  /*
   const countRow = db.prepare("SELECT COUNT(*) as cnt FROM trades").get() as {
     cnt: number;
   };
@@ -230,6 +231,7 @@ function ensureSchemaAndSeed(db: DatabaseSync): void {
       }
     }
   }
+  */
 
   // 3. Backfill entry_fx_rate_to_eur for existing rows where missing
   const nullEntryFxCount = db
