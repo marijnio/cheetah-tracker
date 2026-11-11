@@ -16,7 +16,6 @@ import {
   ShieldCheck,
   Pencil,
   Wallet,
-  Download,
   Save,
   FolderOpen,
   FileCode2,
@@ -297,7 +296,7 @@ export function DashboardClient({
   };
 
   // File Action: Save XML File directly back to file handle or export via download
-  const handleSaveAction = async (forceSaveAs = false) => {
+  const handleSaveAction = async () => {
     try {
       const xmlString = serializePortfolioToXml(
         {
@@ -310,7 +309,7 @@ export function DashboardClient({
         APP_VERSION
       );
 
-      let safeFileName = currentFileName.endsWith(".xml")
+      const safeFileName = currentFileName.endsWith(".xml")
         ? currentFileName
         : `${currentFileName.replace(/\.[^/.]+$/, "")}.xml`;
 
@@ -325,8 +324,7 @@ export function DashboardClient({
         const res = await savePortfolioToFile(
           xmlString,
           activeFileHandleRef.current,
-          safeFileName,
-          forceSaveAs
+          safeFileName
         );
 
         if (!res) return; // User cancelled save picker
@@ -353,15 +351,6 @@ export function DashboardClient({
       }
 
       // 2. Fallback (Firefox, Safari, non-HTTPS):
-      // If "Save As" was clicked, prompt the user for the new file name
-      if (forceSaveAs) {
-        const promptName = window.prompt("Save As - Enter XML file name:", safeFileName);
-        if (!promptName || !promptName.trim()) return;
-        safeFileName = promptName.trim().endsWith(".xml")
-          ? promptName.trim()
-          : `${promptName.trim()}.xml`;
-        setCurrentFileName(safeFileName);
-      }
       const blob = new Blob([xmlString], { type: "application/xml;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -400,7 +389,7 @@ export function DashboardClient({
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        handleSaveActionRef.current(false);
+        handleSaveActionRef.current();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -1263,7 +1252,7 @@ export function DashboardClient({
 
               <button
                 type="button"
-                onClick={() => handleSaveAction(false)}
+                onClick={handleSaveAction}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50/70 transition-colors cursor-pointer ${isSidebarCollapsed ? "justify-center px-2" : ""}`}
                 title={
                   hasDirectFileConnection
@@ -1280,16 +1269,6 @@ export function DashboardClient({
                     )}
                   </>
                 )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSaveAction(true)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors cursor-pointer ${isSidebarCollapsed ? "justify-center px-2" : ""}`}
-                title="Save current portfolio to a new file location (Save As)"
-              >
-                <Download className="w-4 h-4 text-slate-400 shrink-0" />
-                {!isSidebarCollapsed && <span className="flex-1 text-left truncate">Save As...</span>}
               </button>
 
               <button
