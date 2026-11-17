@@ -15,7 +15,6 @@ import {
   Menu,
   ShieldCheck,
   Pencil,
-  Wallet,
   Save,
   FolderOpen,
   FileCode2,
@@ -1346,76 +1345,35 @@ export function DashboardClient({
             </div>
           )}
           <div className="px-4 sm:px-8 pt-5 pb-0">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
               {/* Left: Mobile hamburger + Hero Value */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3 min-w-0">
                 <button
                   type="button"
                   onClick={() => setIsMobileSidebarOpen(true)}
-                  className="p-2 -ml-1 rounded-lg text-slate-600 hover:bg-slate-100 lg:hidden cursor-pointer"
+                  className="p-2 -ml-1 rounded-lg text-slate-600 hover:bg-slate-100 lg:hidden cursor-pointer shrink-0"
                 >
                   <Menu className="w-5 h-5" />
                 </button>
-                <div>
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400 mb-0.5">
-                    <span>
-                      {activeSection === "TRADES"
-                        ? "Trading Portfolio • Total Account Value"
-                        : activeSection === "EQUITY"
-                          ? "Performance Analytics • Total Account Value"
-                          : activeSection === "SECURITIES"
-                            ? "Master Entity Repository • Securities & Quote Feeds"
-                            : "Currency Conversion • Live & Historical ECB Feeds"}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsAccountModalOpen(true)}
-                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 rounded px-1.5 py-0.2 transition-colors cursor-pointer capitalize tracking-normal"
-                      title="Update Current Cash Balance"
-                    >
-                      <Pencil className="w-2.5 h-2.5" />
-                      <span>Edit Cash</span>
-                    </button>
-                    {/* Active File Pill */}
-                    <div
-                      className="inline-flex items-center gap-1.5 px-2 py-0.2 rounded bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-mono"
-                      title={
-                        hasDirectFileConnection
-                          ? `Connected to local/Google Drive file: ${currentFileName}${lastSavedTime ? ` (last saved ${lastSavedTime})` : ""}`
-                          : lastSavedTime
-                            ? `Portfolio file: ${currentFileName} (saved at ${lastSavedTime})`
-                            : `Portfolio file: ${currentFileName} (unsaved changes)`
-                      }
-                    >
-                      <FileCode2 className="w-3 h-3 text-slate-500" />
-                      <span className="truncate max-w-[130px] sm:max-w-[200px]">{currentFileName}</span>
-                      {hasDirectFileConnection && (
-                        <span
-                          className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"
-                          title="Direct File Sync connected"
-                        />
-                      )}
-                      {hasUnsavedChanges ? (
-                        <span className="px-1 py-0.1 text-[9px] font-bold rounded bg-amber-100 text-amber-800 uppercase font-sans">
-                          Unsaved
-                        </span>
-                      ) : (
-                        <span className="text-emerald-600 flex items-center" title="All changes saved to file">
-                          <CheckCircle2 className="w-2.5 h-2.5" />
-                        </span>
-                      )}
-                    </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                    {activeSection === "TRADES"
+                      ? "Trading Portfolio • Total Account Value"
+                      : activeSection === "EQUITY"
+                        ? "Performance Analytics • Total Account Value"
+                        : activeSection === "SECURITIES"
+                          ? "Master Entity Repository • Securities & Quote Feeds"
+                          : "Currency Conversion • Live & Historical ECB Feeds"}
                   </div>
-                  <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
-                    <button
-                      type="button"
-                      onClick={() => setIsAccountModalOpen(true)}
+
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span
                       suppressHydrationWarning
-                      className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 tabular-nums hover:text-blue-600 transition-colors text-left cursor-pointer group"
-                      title="Total Account Value = Cash (€) + In Trades (€). Click to update Cash."
+                      className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 tabular-nums"
+                      title="Total Account Value = Cash (€) + In Trades (€)"
                     >
                       €{Math.round(currentTotalEquity).toLocaleString("en-US")}
-                    </button>
+                    </span>
                     <span
                       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold tabular-nums ${isPositiveNet
                         ? "bg-emerald-50 text-emerald-600"
@@ -1439,79 +1397,102 @@ export function DashboardClient({
                         Total P&amp;L
                       </span>
                     </span>
+                  </div>
 
-                    {/* Breakdown: Cash vs In Trades */}
-                    <div className="flex items-center gap-2.5 text-xs text-slate-500 font-medium tabular-nums sm:border-l sm:border-slate-200 sm:pl-3">
-                      <button
-                        type="button"
-                        onClick={() => setIsAccountModalOpen(true)}
-                        className="hover:text-emerald-700 transition-colors cursor-pointer flex items-center gap-1 group"
-                        title="Click to edit Cash balance"
-                      >
-                        <span className="text-slate-500">Cash:</span>{" "}
-                        <strong className="text-slate-800 font-semibold group-hover:text-emerald-700">
-                          €{Math.round(cashAvailable).toLocaleString("en-US")}
-                        </strong>{" "}
-                        <span className="text-slate-400">({cashPercent.toFixed(1)}%)</span>
-                        <Pencil className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-600" />
-                      </button>
-                      <span className="text-slate-300">•</span>
-                      <span title="Capital currently invested in open positions">
-                        In Trades:{" "}
-                        <strong className="text-slate-800 font-semibold">
-                          €{Math.round(displayedKpis.openExposureEur).toLocaleString("en-US")}
-                        </strong>{" "}
-                        <span className="text-slate-400">({investedPercent.toFixed(1)}%)</span>
-                      </span>
-                    </div>
+                  {/* Breakdown: Cash vs In Trades */}
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5 text-xs text-slate-500 font-medium tabular-nums">
+                    <button
+                      type="button"
+                      onClick={() => setIsAccountModalOpen(true)}
+                      className="hover:text-emerald-700 transition-colors cursor-pointer inline-flex items-center gap-1 group"
+                      title="Click to edit Cash balance"
+                    >
+                      <span className="text-slate-500">Cash:</span>{" "}
+                      <strong className="text-slate-800 font-semibold group-hover:text-emerald-700">
+                        €{Math.round(cashAvailable).toLocaleString("en-US")}
+                      </strong>{" "}
+                      <span className="text-slate-400">({cashPercent.toFixed(1)}%)</span>
+                      <Pencil className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-600" />
+                    </button>
+                    <span className="text-slate-300">•</span>
+                    <span title="Capital currently invested in open positions">
+                      In Trades:{" "}
+                      <strong className="text-slate-800 font-semibold">
+                        €{Math.round(displayedKpis.openExposureEur).toLocaleString("en-US")}
+                      </strong>{" "}
+                      <span className="text-slate-400">({investedPercent.toFixed(1)}%)</span>
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* Right Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAccountModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-                  title="Update your current cash balance"
+              {/* Right: File Status Pill + Action Buttons */}
+              <div className="flex flex-col lg:items-end gap-2.5 shrink-0">
+                {/* Active File Pill */}
+                <div
+                  className="inline-flex items-center self-start lg:self-end gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-mono"
+                  title={
+                    hasDirectFileConnection
+                      ? `Connected to local/Google Drive file: ${currentFileName}${lastSavedTime ? ` (last saved ${lastSavedTime})` : ""}`
+                      : lastSavedTime
+                        ? `Portfolio file: ${currentFileName} (saved at ${lastSavedTime})`
+                        : `Portfolio file: ${currentFileName} (unsaved changes)`
+                  }
                 >
-                  <Wallet className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="hidden sm:inline">Cash: €{Math.round(cashBalance).toLocaleString("en-US")}</span>
-                  <span className="sm:hidden">Cash</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleOpenPositionSizer()}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
-                  title="Risk-First Position Sizing Calculator"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Position Sizer</span>
-                </button>
+                  <FileCode2 className="w-3 h-3 text-slate-500 shrink-0" />
+                  <span className="truncate max-w-[160px] sm:max-w-[220px]">{currentFileName}</span>
+                  {hasDirectFileConnection && (
+                    <span
+                      className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"
+                      title="Direct File Sync connected"
+                    />
+                  )}
+                  {hasUnsavedChanges ? (
+                    <span className="px-1 py-0.5 text-[9px] font-bold rounded bg-amber-100 text-amber-800 uppercase font-sans leading-none">
+                      Unsaved
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600 flex items-center" title="All changes saved to file">
+                      <CheckCircle2 className="w-3 h-3" />
+                    </span>
+                  )}
+                </div>
 
-                <button
-                  type="button"
-                  disabled={isSyncingAll}
-                  onClick={() => handleBatchSync("OPEN_ONLY")}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
-                  title="Sync live quotes & FX rates for open positions from Yahoo Finance"
-                >
-                  <RefreshCw
-                    className={`w-3.5 h-3.5 text-blue-600 ${isSyncingAll ? "animate-spin" : ""
-                      }`}
-                  />
-                  <span>{isSyncingAll ? "Syncing..." : "Sync Quotes"}</span>
-                </button>
+                {/* Action Buttons */}
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenPositionSizer()}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
+                    title="Risk-First Position Sizing Calculator"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span>Position Sizer</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={handleOpenCreate}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 stroke-[2.5]" />
-                  <span>Add Trade</span>
-                </button>
+                  <button
+                    type="button"
+                    disabled={isSyncingAll}
+                    onClick={() => handleBatchSync("OPEN_ONLY")}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                    title="Sync live quotes & FX rates for open positions from Yahoo Finance"
+                  >
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 text-blue-600 shrink-0 ${isSyncingAll ? "animate-spin" : ""
+                        }`}
+                    />
+                    <span>{isSyncingAll ? "Syncing..." : "Sync Quotes"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleOpenCreate}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    <Plus className="w-4 h-4 stroke-[2.5] shrink-0" />
+                    <span>Add Trade</span>
+                  </button>
+                </div>
               </div>
             </div>
 
