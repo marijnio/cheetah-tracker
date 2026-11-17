@@ -63,6 +63,7 @@ import {
   createDefaultForexPairs,
   clientCreateTrade,
   clientUpdateTrade,
+  clientTrimTrade,
   clientDeleteTrade,
   clientBulkImportTrades,
   clientUpsertSecurity,
@@ -72,6 +73,7 @@ import {
   clientUpdateForexPairById,
   clientDeleteForexPairById,
   type ComputedWorkspacePayload,
+  type TrimTradeInput,
 } from "@/lib/client-portfolio-store";
 import { parseTradesCsv } from "@/lib/csv-parser";
 
@@ -122,7 +124,7 @@ export function DashboardClient({
   const [sizerParams, setSizerParams] = useState<
     { securityId?: number; buyPrice?: number; initialStopLoss?: number } | undefined
   >(undefined);
-  const [modalMode, setModalMode] = useState<"create" | "edit" | "close">(
+  const [modalMode, setModalMode] = useState<"create" | "edit" | "close" | "trim">(
     "create"
   );
   const [isImporting, setIsImporting] = useState(false);
@@ -553,7 +555,7 @@ export function DashboardClient({
 
   const handleOpenEdit = (
     trade: ComputedTrade,
-    mode: "edit" | "close" = "edit"
+    mode: "edit" | "close" | "trim" = "edit"
   ) => {
     setEditingTrade(trade);
     setPreselectedSecurity(null);
@@ -597,6 +599,11 @@ export function DashboardClient({
       const next = clientCreateTrade(trades, securities, forexPairs, data);
       applyWorkspacePayload(next);
     }
+  };
+
+  const handleTrimTrade = async (tradeId: number, data: TrimTradeInput) => {
+    const next = clientTrimTrade(trades, securities, forexPairs, tradeId, data);
+    applyWorkspacePayload(next);
   };
 
   const handleToggleField = async (
@@ -1643,6 +1650,7 @@ export function DashboardClient({
           setInitialSizing(null);
         }}
         onSubmit={handleSaveTrade}
+        onTrim={handleTrimTrade}
         onDeleteTrade={handleDeleteTrade}
         initialTrade={editingTrade}
         preselectedSecurity={preselectedSecurity}

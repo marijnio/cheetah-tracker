@@ -13,6 +13,7 @@ import {
   LineChart,
 } from "lucide-react";
 import type { ComputedTrade } from "@/lib/trade-math";
+import type { TrimTradeInput } from "@/lib/client-portfolio-store";
 import type {
   NewTradeInput,
   SecurityRecord,
@@ -47,6 +48,7 @@ interface TradeModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: NewTradeInput, tradeId?: number) => Promise<void>;
+  onTrim?: (tradeId: number, data: TrimTradeInput) => Promise<void>;
   onDeleteTrade?: (trade: ComputedTrade) => Promise<void>;
   initialTrade?: ComputedTrade | null;
   preselectedSecurity?: SecurityRecord | null;
@@ -59,7 +61,7 @@ interface TradeModalProps {
   } | null;
   securities: SecurityRecord[];
   forexPairs: ForexPairRecord[];
-  mode?: "create" | "edit" | "close";
+  mode?: "create" | "edit" | "close" | "trim";
   onNavigateToSecurities?: () => void;
   onOpenPositionSizer?: (params?: {
     securityId?: number;
@@ -72,6 +74,7 @@ export function TradeModal({
   isOpen,
   onClose,
   onSubmit,
+  onTrim,
   onDeleteTrade,
   initialTrade,
   preselectedSecurity,
@@ -123,16 +126,24 @@ export function TradeModal({
       setCurrency(initialTrade.currency || "USD");
       setStartDate(initialTrade.startDate);
       setEndDate(
-        mode === "close" && !initialTrade.endDate
+        (mode === "close" || mode === "trim") && !initialTrade.endDate
           ? new Date().toISOString().slice(0, 10)
           : initialTrade.endDate || ""
       );
-      setShares(String(initialTrade.shares));
+      setShares(
+        mode === "trim"
+          ? String(
+              initialTrade.shares >= 2
+                ? Math.floor(initialTrade.shares / 2)
+                : Number((initialTrade.shares / 2).toFixed(4))
+            )
+          : String(initialTrade.shares)
+      );
       setBuyPrice(String(initialTrade.buyPrice));
       setSellPrice(
         initialTrade.sellPrice !== null && initialTrade.sellPrice !== undefined
           ? String(initialTrade.sellPrice)
-          : mode === "close"
+          : mode === "close" || mode === "trim"
             ? String(initialTrade.latestPrice)
             : ""
       );
@@ -153,14 +164,18 @@ export function TradeModal({
       );
       setFxRateToEur(
         String(
-          mode === "close" && !initialTrade.endDate
+          (mode === "close" || mode === "trim") && !initialTrade.endDate
             ? initialTrade.rateToEur ??
             getFxRateForCurrency(initialTrade.currency || "USD")
             : initialTrade.fxRateToEur ?? 1.0
         )
       );
-      setStopMoved(initialTrade.stopMoved);
-      setTrimmedAt2R(initialTrade.trimmedAt2R);
+      setStopMoved(
+        mode === "trim"
+          ? initialTrade.stopMoved || initialTrade.rMultiple >= 2
+          : initialTrade.stopMoved
+      );
+      setTrimmedAt2R(mode === "trim" ? true : initialTrade.trimmedAt2R);
       setNotes(initialTrade.notes || "");
     } else if (initialSizing) {
       const sec = initialSizing.securityId
@@ -446,6 +461,20 @@ export function TradeModal({
           ? 1.0
           : Number(entryFxRateToEur) || resolvedExitFx;
 
+      if (mode === "trim" && initialTrade && onTrim) {
+        await onTrim(initialTrade.id, {
+          trimmedShares: Number(shares),
+          trimDate: endDate.trim() || new Date().toISOString().slice(0, 10),
+          trimPrice: Number(sellPrice),
+          fxRateToEur: resolvedExitFx,
+          stopMoved,
+          trimmedAt2R,
+          notes: notes.trim() || null,
+        });
+        onClose();
+        return;
+      }
+
       await onSubmit(
         {
           securityId: selectedSec ? selectedSec.id : null,
@@ -480,11 +509,13 @@ export function TradeModal({
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">
           <div>
             <h2 className="text-lg font-bold text-slate-900">
-              {mode === "close"
-                ? `Close Position: ${initialTrade?.ticker}`
-                : initialTrade
-                  ? `Edit Trade: ${initialTrade.ticker}`
-                  : "Add Trade"}
+              {mode === "trim"
+                ? `Trim Position: ${initialTrade?.ticker}`
+                : mode === "close"
+                  ? `Close Position: ${initialTrade?.ticker}`
+                  : initialTrade
+                    ? `Edit Trade: ${initialTrade.ticker}`
+                    : "Add Trade"}
             </h2>
                 <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
                   <span>
@@ -542,10 +573,10 @@ export function TradeModal({
             className="p-6 space-y-5 max-h-[82vh] overflow-y-auto"
           >
             {/* Connected Security Information */}
-            {mode === "close" ? (
+            {mode === "close" || mode === "trim" ? (
               <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                  Closing Position For
+                  {mode === "trim" ? "Trimming Position For" : "Closing Position For"}
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -561,11 +592,17 @@ export function TradeModal({
                       </span>
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">
-                      Entry: {shares} shares @ {currency} {buyPrice} (Stop: {currency} {initialStopLoss})
+                      Entry: {initialTrade?.shares ?? shares} shares @ {currency} {buyPrice} (Stop: {currency} {initialStopLoss})
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-[11px] text-slate-400">Security master details are managed under the <strong>Securities</strong> tab</span>
+                    {mode === "trim" && initialTrade ? (
+                      <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1 font-medium">
+                        Splits into closed trim + {Math.max(0, Number((initialTrade.shares - numShares).toFixed(4)))} open shares
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-400">Security master details are managed under the <strong>Securities</strong> tab</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -619,39 +656,64 @@ export function TradeModal({
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-slate-600">
-                    Shares (Quantity) *
+                    {mode === "trim" ? "Shares to Trim *" : "Shares (Quantity) *"}
                   </label>
-                  {onOpenPositionSizer && mode !== "close" && (
+                  {mode === "trim" && initialTrade ? (
                     <button
                       type="button"
                       onClick={() =>
-                        onOpenPositionSizer({
-                          securityId: selectedSecurityId
-                            ? Number(selectedSecurityId)
-                            : undefined,
-                          buyPrice: buyPrice ? Number(buyPrice) : undefined,
-                          initialStopLoss: initialStopLoss
-                            ? Number(initialStopLoss)
-                            : undefined,
-                        })
+                        setShares(
+                          String(
+                            initialTrade.shares >= 2
+                              ? Math.floor(initialTrade.shares / 2)
+                              : Number((initialTrade.shares / 2).toFixed(4))
+                          )
+                        )
                       }
-                      className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
-                      title="Open Risk-First Position Sizing Calculator"
+                      className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 cursor-pointer"
                     >
-                      <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Risk Sizer</span>
+                      50% ({initialTrade.shares >= 2 ? Math.floor(initialTrade.shares / 2) : Number((initialTrade.shares / 2).toFixed(4))})
                     </button>
+                  ) : (
+                    onOpenPositionSizer && mode !== "close" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenPositionSizer({
+                            securityId: selectedSecurityId
+                              ? Number(selectedSecurityId)
+                              : undefined,
+                            buyPrice: buyPrice ? Number(buyPrice) : undefined,
+                            initialStopLoss: initialStopLoss
+                              ? Number(initialStopLoss)
+                              : undefined,
+                          })
+                        }
+                        className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                        title="Open Risk-First Position Sizing Calculator"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Risk Sizer</span>
+                      </button>
+                    )
                   )}
                 </div>
                 <input
                   type="number"
                   step="any"
                   required
+                  min={mode === "trim" ? "0.0001" : undefined}
+                  max={mode === "trim" && initialTrade ? String(initialTrade.shares) : undefined}
                   placeholder="100"
                   value={shares}
                   onChange={(e) => setShares(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
                 />
+                {mode === "trim" && initialTrade && (numShares <= 0 || numShares >= initialTrade.shares) && (
+                  <p className="text-[11px] text-rose-600 mt-1">
+                    Must be between 0 and {initialTrade.shares} shares.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -662,10 +724,11 @@ export function TradeModal({
                   type="number"
                   step="any"
                   required
+                  disabled={mode === "trim"}
                   placeholder="150.00"
                   value={buyPrice}
                   onChange={(e) => setBuyPrice(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-500 focus:outline-none focus:border-blue-600"
                 />
               </div>
 
@@ -674,22 +737,25 @@ export function TradeModal({
                   <label className="block text-xs font-semibold text-slate-600">
                     Initial Stop Loss *
                   </label>
-                  <button
-                    type="button"
-                    onClick={applyDefault6PctStop}
-                    className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
-                  >
-                    <Calculator className="w-3 h-3" /> -6% Stop
-                  </button>
+                  {mode !== "trim" && (
+                    <button
+                      type="button"
+                      onClick={applyDefault6PctStop}
+                      className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Calculator className="w-3 h-3" /> -6% Stop
+                    </button>
+                  )}
                 </div>
                 <input
                   type="number"
                   step="any"
                   required
+                  disabled={mode === "trim"}
                   placeholder="141.00"
                   value={initialStopLoss}
                   onChange={(e) => setInitialStopLoss(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-500 focus:outline-none focus:border-blue-600"
                 />
               </div>
             </div>
@@ -703,18 +769,21 @@ export function TradeModal({
                 <input
                   type="date"
                   required
+                  disabled={mode === "trim"}
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-500 focus:outline-none focus:border-blue-600"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  End Date <span className="text-slate-400 font-normal">(Open)</span>
+                  {mode === "trim" ? "Trim Date *" : "End Date "}
+                  {mode !== "trim" && <span className="text-slate-400 font-normal">(Open)</span>}
                 </label>
                 <input
                   type="date"
+                  required={mode === "trim"}
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
@@ -723,12 +792,17 @@ export function TradeModal({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  {endDate ? `Sell Price (${currency})` : `Latest Price (${currency})`}
+                  {mode === "trim"
+                    ? `Trim Price (${currency}) *`
+                    : endDate
+                      ? `Sell Price (${currency})`
+                      : `Latest Price (${currency})`}
                 </label>
-                {endDate ? (
+                {endDate || mode === "trim" ? (
                   <input
                     type="number"
                     step="any"
+                    required={mode === "trim"}
                     placeholder="Exit price"
                     value={sellPrice}
                     onChange={(e) => setSellPrice(e.target.value)}
@@ -958,16 +1032,23 @@ export function TradeModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={
+                    submitting ||
+                    (mode === "trim" &&
+                      !!initialTrade &&
+                      (numShares <= 0 || numShares >= initialTrade.shares))
+                  }
                   className="px-5 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   {submitting
                     ? "Saving..."
-                    : mode === "close"
-                      ? "Confirm Close Trade"
-                      : initialTrade
-                        ? "Save Changes"
-                        : "Add Trade"}
+                    : mode === "trim"
+                      ? "Confirm Trim & Split"
+                      : mode === "close"
+                        ? "Confirm Close Trade"
+                        : initialTrade
+                          ? "Save Changes"
+                          : "Add Trade"}
                 </button>
               </div>
             </div>

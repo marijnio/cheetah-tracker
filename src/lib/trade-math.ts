@@ -180,16 +180,55 @@ export function computeTradesWithMetrics(
  * Computes top-level portfolio KPI summary metrics across a list of computed trades.
  */
 export function computePortfolioKPIs(trades: ComputedTrade[]): PortfolioKPIs {
-  const totalTrades = trades.length;
   const openTrades = trades.filter((t) => t.isOpen);
   const closedTradesList = trades.filter((t) => !t.isOpen);
 
   const openPositions = openTrades.length;
   const closedTrades = closedTradesList.length;
 
-  // Evaluate win/loss distribution across trades in the ledger
-  const winners = trades.filter((t) => t.gainLossPercent > 0);
-  const losers = trades.filter((t) => t.gainLossPercent <= 0);
+  // Group trimmed/split lots sharing a positionGroupId so 1 original trade
+  // split into multiple lots counts as 1 trade in win rate & R-multiple stats.
+  const positionGroupsMap = new Map<string, ComputedTrade[]>();
+  for (const trade of trades) {
+    const key = trade.positionGroupId
+      ? `group:${trade.positionGroupId}`
+      : `lot:${trade.id}`;
+    const existing = positionGroupsMap.get(key);
+    if (existing) {
+      existing.push(trade);
+    } else {
+      positionGroupsMap.set(key, [trade]);
+    }
+  }
+
+  const groupedPositions = Array.from(positionGroupsMap.values()).map((lots) => {
+    if (lots.length === 1) {
+      return {
+        gainLossPercent: lots[0].gainLossPercent,
+        rMultiple: lots[0].rMultiple,
+      };
+    }
+
+    const totalEntryLocal = lots.reduce((sum, l) => sum + l.entryValueLocal, 0);
+    const totalLatestLocal = lots.reduce((sum, l) => sum + l.latestValueLocal, 0);
+    const gainLossPercent =
+      totalEntryLocal > 0
+        ? (totalLatestLocal - totalEntryLocal) / totalEntryLocal
+        : 0;
+    const rMultiple =
+      totalEntryLocal > 0
+        ? lots.reduce((sum, l) => sum + l.rMultiple * l.entryValueLocal, 0) /
+        totalEntryLocal
+        : 0;
+
+    return { gainLossPercent, rMultiple };
+  });
+
+  const totalTrades = groupedPositions.length;
+
+  // Evaluate win/loss distribution across grouped positions in the ledger
+  const winners = groupedPositions.filter((p) => p.gainLossPercent > 0);
+  const losers = groupedPositions.filter((p) => p.gainLossPercent <= 0);
 
   const winningTrades = winners.length;
   const losingTrades = losers.length;
@@ -199,12 +238,12 @@ export function computePortfolioKPIs(trades: ComputedTrade[]): PortfolioKPIs {
 
   const avgWinPercent =
     winners.length > 0
-      ? winners.reduce((sum, t) => sum + t.gainLossPercent, 0) / winners.length
+      ? winners.reduce((sum, p) => sum + p.gainLossPercent, 0) / winners.length
       : 0;
 
   const avgLossPercent =
     losers.length > 0
-      ? losers.reduce((sum, t) => sum + t.gainLossPercent, 0) / losers.length
+      ? losers.reduce((sum, p) => sum + p.gainLossPercent, 0) / losers.length
       : 0;
 
   const absAvgLoss = Math.abs(avgLossPercent);
@@ -221,13 +260,19 @@ export function computePortfolioKPIs(trades: ComputedTrade[]): PortfolioKPIs {
   const totalGainLossUsdEquivalent = trades.reduce((sum, t) => sum + t.gainLossLocal, 0);
 
   const avgRMultiple =
-    totalTrades > 0 ? trades.reduce((sum, t) => sum + t.rMultiple, 0) / totalTrades : 0;
+    totalTrades > 0
+      ? groupedPositions.reduce((sum, p) => sum + p.rMultiple, 0) / totalTrades
+      : 0;
 
   const avgWinR =
-    winners.length > 0 ? winners.reduce((sum, t) => sum + t.rMultiple, 0) / winners.length : 0;
+    winners.length > 0
+      ? winners.reduce((sum, p) => sum + p.rMultiple, 0) / winners.length
+      : 0;
 
   const avgLossR =
-    losers.length > 0 ? losers.reduce((sum, t) => sum + t.rMultiple, 0) / losers.length : 0;
+    losers.length > 0
+      ? losers.reduce((sum, p) => sum + p.rMultiple, 0) / losers.length
+      : 0;
 
   const openExposureEur = openTrades.reduce((sum, t) => sum + t.latestValueEur, 0);
   const openRiskEur = openTrades.reduce((sum, t) => {

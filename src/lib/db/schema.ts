@@ -91,6 +91,7 @@ export interface TradeRecord {
   manualLatestPrice: number | null;
   entryFxRateToEur: number; // Locked at Start Date
   fxRateToEur: number; // Locked at End Date for closed trades; live/cached for open trades
+  positionGroupId?: string | null; // Links split/trimmed lots belonging to the same original position
 
   notes: string | null;
 
@@ -122,6 +123,7 @@ export interface NewTradeInput {
   manualLatestPrice?: number | null;
   entryFxRateToEur?: number;
   fxRateToEur?: number;
+  positionGroupId?: string | null;
   notes?: string | null;
 }
 
@@ -181,6 +183,7 @@ export const SCHEMA_DDL = `
     manual_latest_price REAL,
     entry_fx_rate_to_eur REAL NOT NULL DEFAULT 1.0,
     fx_rate_to_eur REAL NOT NULL DEFAULT 1.0,
+    position_group_id TEXT,
     notes TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL

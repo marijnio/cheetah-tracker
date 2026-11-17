@@ -172,6 +172,7 @@ export function serializePortfolioToXml(
       ` manualLatestPrice="${escapeXml(t.manualLatestPrice ?? "")}"` +
       ` entryFxRateToEur="${escapeXml(t.entryFxRateToEur)}"` +
       ` fxRateToEur="${escapeXml(t.fxRateToEur)}"` +
+      ` positionGroupId="${escapeXml(t.positionGroupId ?? "")}"` +
       ` createdAt="${escapeXml(t.createdAt)}"` +
       ` updatedAt="${escapeXml(t.updatedAt)}"`;
 
@@ -387,6 +388,7 @@ export function parsePortfolioXml(
         ),
         entryFxRateToEur: entryFxRate,
         fxRateToEur: fxRate,
+        positionGroupId: getAttrOrChild(el, "positionGroupId") || null,
         notes: notesVal ? notesVal : null,
         createdAt: getAttrOrChild(el, "createdAt") || now,
         updatedAt: getAttrOrChild(el, "updatedAt") || now,

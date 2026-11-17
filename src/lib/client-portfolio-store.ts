@@ -374,6 +374,7 @@ export function stripComputedTradeFields(
     manualLatestPrice: t.manualLatestPrice,
     entryFxRateToEur: t.entryFxRateToEur,
     fxRateToEur: t.fxRateToEur,
+    positionGroupId: t.positionGroupId ?? null,
     notes: t.notes,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
@@ -531,6 +532,7 @@ export function clientCreateTrade(
     manualLatestPrice: input.manualLatestPrice ?? null,
     entryFxRateToEur: entryFxRate,
     fxRateToEur: fxRate,
+    positionGroupId: input.positionGroupId ?? null,
     notes: input.notes ?? null,
     createdAt: now,
     updatedAt: now,
@@ -660,6 +662,10 @@ export function clientUpdateTrade(
         : existing.manualLatestPrice,
     entryFxRateToEur: nextEntryFxRate,
     fxRateToEur: nextFxRate,
+    positionGroupId:
+      updates.positionGroupId !== undefined
+        ? updates.positionGroupId ?? null
+        : existing.positionGroupId ?? null,
     notes: updates.notes !== undefined ? updates.notes : existing.notes,
     updatedAt: now,
   };
@@ -667,6 +673,112 @@ export function clientUpdateTrade(
   return normalizeAndComputeWorkspace(
     rawTrades,
     nextSecurities,
+    currentForexPairs
+  );
+}
+
+export interface TrimTradeInput {
+  trimmedShares: number;
+  trimDate: string;
+  trimPrice: number;
+  fxRateToEur?: number;
+  stopMoved?: boolean;
+  trimmedAt2R?: boolean;
+  notes?: string | null;
+}
+
+/**
+ * Splits an open trade into two linked lots sharing a positionGroupId:
+ * 1) Updates the existing trade with the remaining open shares.
+ * 2) Inserts a new closed trade for the trimmed shares at the trim date & price.
+ */
+export function clientTrimTrade(
+  currentTrades: TradeRecord[],
+  currentSecurities: SecurityRecord[],
+  currentForexPairs: ForexPairRecord[],
+  id: number,
+  input: TrimTradeInput
+): ComputedWorkspacePayload {
+  const now = new Date().toISOString();
+  const rawTrades = stripComputedTradeFields(currentTrades);
+  const idx = rawTrades.findIndex((t) => t.id === id);
+  if (idx === -1) {
+    return normalizeAndComputeWorkspace(
+      rawTrades,
+      currentSecurities,
+      currentForexPairs
+    );
+  }
+
+  const existing = rawTrades[idx];
+  const trimmedShares = Number(input.trimmedShares);
+  if (
+    !Number.isFinite(trimmedShares) ||
+    trimmedShares <= 0 ||
+    trimmedShares >= existing.shares
+  ) {
+    return normalizeAndComputeWorkspace(
+      rawTrades,
+      currentSecurities,
+      currentForexPairs
+    );
+  }
+
+  const remainingShares = Number((existing.shares - trimmedShares).toFixed(6));
+  const currency = (existing.currency || "USD").toUpperCase();
+  const resolvedExitFx =
+    currency === "EUR"
+      ? 1.0
+      : input.fxRateToEur ?? existing.fxRateToEur ?? 1.0;
+
+  const groupId =
+    existing.positionGroupId || `grp-${existing.id}-${Date.now()}`;
+  const nextTradeId =
+    rawTrades.reduce((m, t) => Math.max(m, t.id || 0), 0) + 1;
+
+  const nextStopMoved =
+    input.stopMoved !== undefined ? Boolean(input.stopMoved) : existing.stopMoved;
+  const nextTrimmedAt2R =
+    input.trimmedAt2R !== undefined ? Boolean(input.trimmedAt2R) : true;
+
+  // 1. Update original trade to represent the remaining open runner
+  rawTrades[idx] = {
+    ...existing,
+    shares: remainingShares,
+    endDate: null,
+    sellPrice: null,
+    stopMoved: nextStopMoved,
+    trimmedAt2R: nextTrimmedAt2R,
+    positionGroupId: groupId,
+    updatedAt: now,
+  };
+
+  // 2. Create the closed trimmed lot
+  const trimmedLot: TradeRecord = {
+    ...existing,
+    id: nextTradeId,
+    shares: trimmedShares,
+    endDate: input.trimDate,
+    sellPrice: input.trimPrice,
+    fxRateToEur: resolvedExitFx,
+    stopMoved: nextStopMoved,
+    trimmedAt2R: nextTrimmedAt2R,
+    positionGroupId: groupId,
+    notes: input.notes !== undefined ? input.notes : existing.notes,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // Insert trimmed lot right after the original trade so they sit adjacent by default
+  const nextTrades = [
+    ...rawTrades.slice(0, idx + 1),
+    trimmedLot,
+    ...rawTrades.slice(idx + 1),
+  ];
+
+  return normalizeAndComputeWorkspace(
+    nextTrades,
+    currentSecurities,
     currentForexPairs
   );
 }

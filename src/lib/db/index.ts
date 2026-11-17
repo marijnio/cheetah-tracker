@@ -158,6 +158,14 @@ function ensureSchemaAndSeed(db: DatabaseSync): void {
     db.exec("ALTER TABLE trades ADD COLUMN entry_fx_rate_to_eur REAL;");
   }
 
+  // Version 5 Migration: Add position_group_id column for grouping trimmed/split lots
+  const hasPositionGroupId = tradeCols.some(
+    (c) => c.name === "position_group_id"
+  );
+  if (!hasPositionGroupId) {
+    db.exec("ALTER TABLE trades ADD COLUMN position_group_id TEXT;");
+  }
+
   // Version 3 Migration: Migrate to single unified ticker
   const secCols = db
     .prepare("PRAGMA table_info(securities)")
@@ -1026,6 +1034,7 @@ interface RawTradeRow {
   manual_latest_price: number | null;
   entry_fx_rate_to_eur: number | null;
   fx_rate_to_eur: number;
+  position_group_id?: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -1055,6 +1064,7 @@ function mapRowToTrade(row: RawTradeRow): TradeRecord {
     manualLatestPrice: row.manual_latest_price,
     entryFxRateToEur: entryFx,
     fxRateToEur: exitFx,
+    positionGroupId: row.position_group_id ?? null,
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1151,16 +1161,16 @@ export function createTrade(input: NewTradeInput): TradeRecord {
           security_id, ticker, yahoo_ticker, gics_sector, start_date, end_date,
           shares, buy_price, sell_price, currency, initial_stop_loss,
           stop_moved, trimmed_at_2r, manual_latest_price, entry_fx_rate_to_eur, fx_rate_to_eur,
-          notes, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          position_group_id, notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
     : db.prepare(`
         INSERT INTO trades (
           security_id, ticker, gics_sector, start_date, end_date,
           shares, buy_price, sell_price, currency, initial_stop_loss,
           stop_moved, trimmed_at_2r, manual_latest_price, entry_fx_rate_to_eur, fx_rate_to_eur,
-          notes, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          position_group_id, notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
   const result = hasYahooTicker
@@ -1181,6 +1191,7 @@ export function createTrade(input: NewTradeInput): TradeRecord {
       input.manualLatestPrice ?? null,
       entryFxRate,
       fxRate,
+      input.positionGroupId ?? null,
       input.notes ?? null,
       now,
       now
@@ -1201,6 +1212,7 @@ export function createTrade(input: NewTradeInput): TradeRecord {
       input.manualLatestPrice ?? null,
       entryFxRate,
       fxRate,
+      input.positionGroupId ?? null,
       input.notes ?? null,
       now,
       now
@@ -1302,6 +1314,7 @@ export function updateTrade(
           manual_latest_price = ?,
           entry_fx_rate_to_eur = ?,
           fx_rate_to_eur = ?,
+          position_group_id = ?,
           notes = ?,
           updated_at = ?
         WHERE id = ?
@@ -1323,6 +1336,7 @@ export function updateTrade(
           manual_latest_price = ?,
           entry_fx_rate_to_eur = ?,
           fx_rate_to_eur = ?,
+          position_group_id = ?,
           notes = ?,
           updated_at = ?
         WHERE id = ?
@@ -1354,6 +1368,9 @@ export function updateTrade(
       nextManualLatest ?? null,
       nextEntryFxRate,
       nextFxRate,
+      updates.positionGroupId !== undefined
+        ? updates.positionGroupId ?? null
+        : existing.positionGroupId ?? null,
       updates.notes !== undefined ? updates.notes : existing.notes,
       now,
       id
@@ -1383,6 +1400,9 @@ export function updateTrade(
       nextManualLatest ?? null,
       nextEntryFxRate,
       nextFxRate,
+      updates.positionGroupId !== undefined
+        ? updates.positionGroupId ?? null
+        : existing.positionGroupId ?? null,
       updates.notes !== undefined ? updates.notes : existing.notes,
       now,
       id

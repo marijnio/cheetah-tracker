@@ -34,7 +34,7 @@ interface TradeTableProps {
     trade: ComputedTrade,
     field: "stopMoved" | "trimmedAt2R"
   ) => Promise<void>;
-  onEditTrade: (trade: ComputedTrade, mode?: "edit" | "close") => void;
+  onEditTrade: (trade: ComputedTrade, mode?: "edit" | "close" | "trim") => void;
   onDeleteTrade?: (trade: ComputedTrade) => Promise<void>;
   onSyncSecurityQuote?: (securityId: number) => Promise<void>;
   onSyncAllOpenQuotes?: () => Promise<void>;
@@ -562,6 +562,22 @@ export function TradeTable({
                           {trade.currency !== "USD" && (
                             <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
                               {trade.currency}
+                            </span>
+                          )}
+                          {trade.positionGroupId && (
+                            <span
+                              className={`text-[9px] font-semibold px-1.5 py-0.2 rounded uppercase tracking-wide ${
+                                isOpen
+                                  ? "bg-indigo-50 text-indigo-600 border border-indigo-200/70"
+                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200/70"
+                              }`}
+                              title={
+                                isOpen
+                                  ? "Open runner lot from a trimmed position (grouped in KPIs)"
+                                  : "Closed trim lot from a split position (grouped in KPIs)"
+                              }
+                            >
+                              {isOpen ? "Runner" : "Trim"}
                             </span>
                           )}
                         </div>
@@ -1142,6 +1158,22 @@ export function TradeTable({
                 <Edit3 className="w-3.5 h-3.5 text-slate-500" />
                 <span>Edit Trade Details</span>
               </button>
+
+              {menuTrade.isOpen && menuTrade.shares > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = menuTrade;
+                    setMenuTrade(null);
+                    setMenuPos(null);
+                    onEditTrade(t, "trim");
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer text-left font-medium"
+                >
+                  <Scissors className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Trim Position (Split)</span>
+                </button>
+              )}
 
               {menuTrade.isOpen && (
                 <button
