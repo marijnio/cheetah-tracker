@@ -64,7 +64,6 @@ import {
   clientUpdateTrade,
   clientTrimTrade,
   clientDeleteTrade,
-  clientBulkImportTrades,
   clientUpsertSecurity,
   clientUpdateSecurityById,
   clientDeleteSecurityById,
@@ -74,7 +73,6 @@ import {
   type ComputedWorkspacePayload,
   type TrimTradeInput,
 } from "@/lib/client-portfolio-store";
-import { parseTradesCsv } from "@/lib/csv-parser";
 
 interface DashboardClientProps {
   initialTrades: ComputedTrade[];
@@ -126,7 +124,6 @@ export function DashboardClient({
   const [modalMode, setModalMode] = useState<"create" | "edit" | "close" | "trim">(
     "create"
   );
-  const [isImporting, setIsImporting] = useState(false);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [cashBalance, setCashBalance] = useState<number>(25000);
   const [riskPercent, setRiskPercent] = useState<number>(1.0);
@@ -233,8 +230,6 @@ export function DashboardClient({
     const newCash = Math.max(0, newTotal - displayedKpis.openExposureEur);
     handleSaveCashBalance(newCash);
   };
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // File Action: Open/Load an XML File with File System Access API (or fallback)
   const handleOpenAction = async () => {
@@ -970,72 +965,6 @@ export function DashboardClient({
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsImporting(true);
-    try {
-      const text = await file.text();
-      const replaceExisting = window.confirm(
-        "Do you want to REPLACE existing trades with this CSV? (Click Cancel to append instead)"
-      );
-      const parsedItems = parseTradesCsv(text);
-      if (parsedItems.length === 0) {
-        alert("No valid trade rows found in the CSV.");
-        return;
-      }
-      const next = clientBulkImportTrades(
-        trades,
-        securities,
-        forexPairs,
-        parsedItems,
-        replaceExisting
-      );
-      applyWorkspacePayload(next);
-      flashNotification(`Imported ${parsedItems.length} trades from "${file.name}".`);
-    } finally {
-      setIsImporting(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
-
-  const handleResetToSample = async () => {
-    if (
-      !window.confirm(
-        "Reset portfolio to the original 132 sample trades? Any unsaved edits will be replaced."
-      )
-    ) {
-      return;
-    }
-    setIsImporting(true);
-    try {
-      const res = await fetch("/api/trades/import-csv", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ useSampleCsv: true, parseOnly: true }),
-      });
-      const data = await res.json();
-      if (res.ok && Array.isArray(data.parsedItems)) {
-        const next = clientBulkImportTrades(
-          [],
-          [],
-          createDefaultForexPairs(),
-          data.parsedItems,
-          true
-        );
-        setCurrentFileName("cheetah-sample-portfolio.xml");
-        setLastSavedTime(null);
-        setHasUnsavedChanges(true);
-        applyWorkspacePayload(next);
-        flashNotification("Loaded sample 132 trades into portfolio.");
-      }
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   const openCount = trades.filter((t) => t.isOpen).length;
   const closedCount = trades.filter((t) => !t.isOpen).length;
   const trimmedCount = trades.filter((t) => t.trimmedAt2R || Boolean(t.positionGroupId)).length;
@@ -1092,15 +1021,6 @@ export function DashboardClient({
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex">
-      {/* Hidden File Input for CSV Import */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv"
-        onChange={handleFileUpload}
-        className="hidden"
-      />
-
       {/* Hidden File Input for XML Portfolio Load */}
       <input
         ref={xmlFileInputRef}
@@ -1596,9 +1516,6 @@ export function DashboardClient({
               onToggleKpiScope={() =>
                 setKpiScope((prev) => (prev === "GLOBAL" ? "FILTERED" : "GLOBAL"))
               }
-              onImportCsvClick={() => fileInputRef.current?.click()}
-              onResetSampleClick={handleResetToSample}
-              isImporting={isImporting}
             />
           )}
 

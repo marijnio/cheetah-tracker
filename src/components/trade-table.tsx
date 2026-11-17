@@ -9,8 +9,6 @@ import {
   CheckCircle2,
   Circle,
   Scissors,
-  Upload,
-  RotateCcw,
   Layers,
   RefreshCw,
   AlertTriangle,
@@ -46,9 +44,6 @@ interface TradeTableProps {
   sectors: string[];
   kpiScope: "GLOBAL" | "FILTERED";
   onToggleKpiScope: () => void;
-  onImportCsvClick: () => void;
-  onResetSampleClick: () => void;
-  isImporting: boolean;
 }
 
 type SortKey =
@@ -127,9 +122,6 @@ export function TradeTable({
   sectors,
   kpiScope,
   onToggleKpiScope,
-  onImportCsvClick,
-  onResetSampleClick,
-  isImporting,
 }: TradeTableProps) {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -312,27 +304,6 @@ export function TradeTable({
               KPIs: {kpiScope === "GLOBAL" ? "All Trades" : "Filtered"}
             </span>
           </button>
-
-          <button
-            type="button"
-            disabled={isImporting}
-            onClick={onImportCsvClick}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors disabled:opacity-50 cursor-pointer"
-          >
-            <Upload className="w-3.5 h-3.5 text-slate-500" />
-            <span>Import CSV</span>
-          </button>
-
-          <button
-            type="button"
-            disabled={isImporting}
-            onClick={onResetSampleClick}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
-            title="Reset ledger to sample CSV"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Reload Sample</span>
-          </button>
         </div>
       </div>
 
@@ -366,6 +337,15 @@ export function TradeTable({
                 >
                   Days {renderSortIcon("tradingDaysHeld")}
                 </span>
+              </th>
+
+              {/* 2b. Shares Held */}
+              <th
+                onClick={() => handleSort("shares")}
+                className="py-3.5 px-3 text-right cursor-pointer hover:text-slate-900 whitespace-nowrap border-l border-slate-200/60"
+                title="Number of shares held for this trade"
+              >
+                Shares {renderSortIcon("shares")}
               </th>
 
               {/* 3. Buy Price */}
@@ -405,6 +385,15 @@ export function TradeTable({
                 title="Latest market price for open trades, exit price for closed trades"
               >
                 Latest Price {renderSortIcon("latestPrice")}
+              </th>
+
+              {/* 4a. Market Value / Total Sell Value (€) */}
+              <th
+                onClick={() => handleSort("latestValueEur")}
+                className="py-3.5 px-3 text-right whitespace-nowrap cursor-pointer hover:text-slate-900"
+                title="Sort by Current Market Value / Total Sell Value (€)"
+              >
+                Value € {renderSortIcon("latestValueEur")}
               </th>
 
               {/* 4b. 1D Change */}
@@ -450,31 +439,11 @@ export function TradeTable({
                 2R Target {renderSortIcon("percentLeftBeforeMove")}
               </th>
 
-                {/* 10. Position Size (Entry € / Latest €) */}
-                <th className="py-3.5 pl-3 pr-5 whitespace-nowrap border-l border-slate-200/60 min-w-[145px]">
-                  <div className="flex items-center justify-between gap-1">
-                    <span
-                      onClick={() => handleSort("entryValueEur")}
-                      className="cursor-pointer hover:text-slate-900"
-                      title="Sort by Entry Value (€)"
-                    >
-                      Size € {renderSortIcon("entryValueEur")}
-                    </span>
-                      <span
-                        onClick={() => handleSort("latestValueEur")}
-                        className="cursor-pointer hover:text-slate-800 text-[10px] font-medium text-slate-400"
-                        title="Sort by Current/Exit Value (€)"
-                      >
-                        Now {renderSortIcon("latestValueEur")}
-                      </span>
-                  </div>
-                </th>
-
-                {/* 11. Actions */}
-                <th className="py-3.5 px-3 text-center whitespace-nowrap border-l border-slate-200/60 w-12">
-                  <span className="sr-only">Actions</span>
-                  <MoreHorizontal className="w-4 h-4 mx-auto text-slate-400" />
-                </th>
+              {/* 11. Actions */}
+              <th className="py-3.5 px-3 text-center whitespace-nowrap border-l border-slate-200/60 w-12">
+                <span className="sr-only">Actions</span>
+                <MoreHorizontal className="w-4 h-4 mx-auto text-slate-400" />
+              </th>
             </tr>
           </thead>
 
@@ -482,7 +451,7 @@ export function TradeTable({
             {sortedTrades.length === 0 ? (
               <tr>
                 <td
-                  colSpan={12}
+                  colSpan={13}
                   className="py-12 text-center text-slate-400 text-sm"
                 >
                   No trades match the current filters.
@@ -566,11 +535,10 @@ export function TradeTable({
                           )}
                           {trade.positionGroupId && (
                             <span
-                              className={`text-[9px] font-semibold px-1.5 py-0.2 rounded uppercase tracking-wide ${
-                                isOpen
+                              className={`text-[9px] font-semibold px-1.5 py-0.2 rounded uppercase tracking-wide ${isOpen
                                   ? "bg-indigo-50 text-indigo-600 border border-indigo-200/70"
                                   : "bg-emerald-50 text-emerald-700 border border-emerald-200/70"
-                              }`}
+                                }`}
                               title={
                                 isOpen
                                   ? "Open runner lot from a trimmed position (grouped in KPIs)"
@@ -621,6 +589,13 @@ export function TradeTable({
                           {trade.tradingDaysHeld}d
                         </span>
                       </div>
+                    </td>
+
+                    {/* 2b. Shares Held */}
+                    <td className="py-3 px-3 text-right whitespace-nowrap border-l border-slate-100">
+                      <span className="font-medium text-slate-700 tabular-nums">
+                        {trade.shares.toLocaleString("en-US")}
+                      </span>
                     </td>
 
                     {/* 3. Buy Price */}
@@ -761,6 +736,16 @@ export function TradeTable({
                           </div>
                         );
                       })()}
+                    </td>
+
+                    {/* 4a. Market Value / Total Sell Value (€) */}
+                    <td className="py-3 px-3 text-right whitespace-nowrap">
+                      <span
+                        className="text-slate-800 font-medium tabular-nums"
+                        title={`${isOpen ? "Market Value" : "Total Sell Value"} (${trade.shares.toLocaleString("en-US")} shs)`}
+                      >
+                        {formatEurValue(trade.latestValueEur)}
+                      </span>
                     </td>
 
                     {/* 4b. 1D Change */}
@@ -906,52 +891,6 @@ export function TradeTable({
                         ) : (
                           <span className="text-slate-300">—</span>
                         )}
-                      </div>
-                    </td>
-
-                    {/* 10. Position Size € (Entry €, Latest €, Shares + Muted Sizing Bar) */}
-                    <td className="py-3 pl-3 pr-5 whitespace-nowrap border-l border-slate-100">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span
-                            className="text-slate-800 font-medium"
-                            title={`Entry Value: ${formatEurValue(
-                              trade.entryValueEur
-                            )} (${formatLocalPrice(
-                              trade.entryValueLocal,
-                              trade.currency
-                            )})`}
-                          >
-                            {formatEurValue(trade.entryValueEur)}
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-medium">
-                            {trade.shares.toLocaleString("en-US")} shs
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
-                          <span title="Latest / Exit Value in EUR">
-                            Now: {formatEurValue(trade.latestValueEur)}
-                          </span>
-                          {trade.currency !== "EUR" && (
-                            <span>
-                              {formatLocalPrice(
-                                trade.entryValueLocal,
-                                trade.currency
-                              )}
-                            </span>
-                          )}
-                        </div>
-                        <div
-                          className="w-full h-1 bg-slate-100 rounded-full overflow-hidden"
-                          title={`Relative entry position size (${Math.round(
-                            trade.entrySizePercentOfMax
-                          )}% of largest trade)`}
-                        >
-                          <div
-                            className="h-full rounded-full bg-slate-300/90 group-hover:bg-slate-400 transition-colors"
-                            style={{ width: `${trade.entrySizePercentOfMax}%` }}
-                          />
-                        </div>
                       </div>
                     </td>
 
