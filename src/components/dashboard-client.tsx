@@ -514,7 +514,7 @@ export function DashboardClient({
     return trades.filter((t) => {
       if (tradeFilter === "OPEN" && !t.isOpen) return false;
       if (tradeFilter === "CLOSED" && t.isOpen) return false;
-      if (tradeFilter === "TRIMMED" && !t.trimmedAt2R) return false;
+      if (tradeFilter === "TRIMMED" && !t.trimmedAt2R && !t.positionGroupId) return false;
       if (sectorFilter !== "ALL" && t.gicsSector !== sectorFilter) return false;
       if (searchQuery.trim() !== "") {
         const q = searchQuery.trim().toLowerCase();
@@ -1039,7 +1039,7 @@ export function DashboardClient({
 
   const openCount = trades.filter((t) => t.isOpen).length;
   const closedCount = trades.filter((t) => !t.isOpen).length;
-  const trimmedCount = trades.filter((t) => t.trimmedAt2R).length;
+  const trimmedCount = trades.filter((t) => t.trimmedAt2R || Boolean(t.positionGroupId)).length;
   const isPositiveNet = displayedKpis.totalGainLossEur >= 0;
   const openExposureEur = displayedKpis.openExposureEur;
   const currentTotalEquity = Math.max(0, cashBalance + openExposureEur);

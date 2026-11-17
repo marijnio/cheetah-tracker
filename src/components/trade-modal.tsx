@@ -468,7 +468,7 @@ export function TradeModal({
           trimPrice: Number(sellPrice),
           fxRateToEur: resolvedExitFx,
           stopMoved,
-          trimmedAt2R,
+          trimmedAt2R: true,
           notes: notes.trim() || null,
         });
         onClose();
@@ -921,17 +921,19 @@ export function TradeModal({
                 </span>
               </label>
 
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={trimmedAt2R}
-                  onChange={(e) => setTrimmedAt2R(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-sm text-slate-700 font-medium">
-                  Trimmed at 2R
-                </span>
-              </label>
+              {mode !== "trim" && (
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={trimmedAt2R}
+                    onChange={(e) => setTrimmedAt2R(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm text-slate-700 font-medium">
+                    Trimmed at 2R
+                  </span>
+                </label>
+              )}
             </div>
 
             {/* Live Trade Math Preview Card */}

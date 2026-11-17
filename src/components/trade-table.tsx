@@ -1112,35 +1112,6 @@ export function TradeTable({
                   </span>
                 )}
               </button>
-
-              <button
-                type="button"
-                onClick={async () => {
-                  const t = menuTrade;
-                  setMenuTrade(null);
-                  setMenuPos(null);
-                  await onToggleField(t, "trimmedAt2R");
-                }}
-                className={`w-full flex items-center justify-between px-3 py-1.5 transition-colors cursor-pointer text-left ${menuTrade.trimmedAt2R
-                  ? "bg-emerald-50/60 text-emerald-700 hover:bg-emerald-100/70"
-                  : "text-slate-700 hover:bg-slate-50"
-                  }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Scissors
-                    className={`w-3.5 h-3.5 ${menuTrade.trimmedAt2R
-                      ? "text-emerald-600"
-                      : "text-slate-400"
-                      }`}
-                  />
-                  <span>2R Trim (Take Profits)</span>
-                </div>
-                {menuTrade.trimmedAt2R && (
-                  <span className="text-[10px] font-semibold text-emerald-600">
-                    Trimmed
-                  </span>
-                )}
-              </button>
             </div>
 
             {/* Trade Management */}
