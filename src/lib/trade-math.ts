@@ -218,7 +218,7 @@ export function computePortfolioKPIs(trades: ComputedTrade[]): PortfolioKPIs {
     const rMultiple =
       totalEntryLocal > 0
         ? lots.reduce((sum, l) => sum + l.rMultiple * l.entryValueLocal, 0) /
-        totalEntryLocal
+          totalEntryLocal
         : 0;
 
     return { gainLossPercent, rMultiple };
