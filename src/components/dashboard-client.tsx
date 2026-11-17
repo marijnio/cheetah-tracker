@@ -31,7 +31,7 @@ import { SecuritiesView } from "./securities-view";
 import { ForexView } from "./forex-view";
 import { AccountEquityModal } from "./account-equity-modal";
 import { AboutModal } from "./about-modal";
-import { APP_VERSION } from "@/lib/version";
+import { APP_VERSION, APP_BUILD_LABEL } from "@/lib/version";
 import {
   computePortfolioKPIs,
   type ComputedTrade,
@@ -1302,7 +1302,7 @@ export function DashboardClient({
                   className="font-mono text-slate-400 hover:text-slate-700 transition-colors cursor-pointer hover:underline"
                   title="Click for app version & details"
                 >
-                  v{APP_VERSION}
+                  {APP_BUILD_LABEL}
                 </button>
               </div>
             </div>
@@ -1629,7 +1629,7 @@ export function DashboardClient({
                 className="font-mono font-medium px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200/80 transition-colors cursor-pointer"
                 title="Click for full version details"
               >
-                v{APP_VERSION}
+                {APP_BUILD_LABEL}
               </button>
             </div>
           </footer>

@@ -1,12 +1,45 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Info, Copy, Check, ShieldCheck, Tag, Terminal } from "lucide-react";
+import {
+  X,
+  Info,
+  Copy,
+  Check,
+  ShieldCheck,
+  Tag,
+  ExternalLink,
+} from "lucide-react";
+import {
+  APP_VERSION,
+  GIT_COMMIT,
+  BUILD_TIME,
+  APP_BUILD_LABEL,
+  GITHUB_REPO_URL,
+} from "@/lib/version";
 
 interface AboutModalProps {
   isOpen: boolean;
   onClose: () => void;
-  version: string;
+  version?: string;
+}
+
+function formatBuildTime(isoString: string | null): string {
+  if (!isoString) return "Local development build";
+  try {
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) return isoString;
+    return date.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+  } catch {
+    return isoString;
+  }
 }
 
 export function AboutModal({ isOpen, onClose, version }: AboutModalProps) {
@@ -14,8 +47,14 @@ export function AboutModal({ isOpen, onClose, version }: AboutModalProps) {
 
   if (!isOpen) return null;
 
+  const displayVersion = version || APP_VERSION;
+  const fullBuildString =
+    GIT_COMMIT !== "dev"
+      ? `v${displayVersion} (${GIT_COMMIT})`
+      : APP_BUILD_LABEL;
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(`v${version}`);
+    navigator.clipboard.writeText(fullBuildString);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -71,7 +110,7 @@ export function AboutModal({ isOpen, onClose, version }: AboutModalProps) {
                 </span>
                 <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60">
                   <Tag className="w-2.5 h-2.5" />
-                  v{version}
+                  {fullBuildString}
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -85,13 +124,13 @@ export function AboutModal({ isOpen, onClose, version }: AboutModalProps) {
               <span className="text-slate-500 font-medium">Running Version</span>
               <div className="flex items-center gap-1.5">
                 <span className="font-mono font-semibold text-slate-800">
-                  v{version}
+                  v{displayVersion}
                 </span>
                 <button
                   type="button"
                   onClick={handleCopy}
                   className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
-                  title="Copy version string"
+                  title="Copy build info"
                 >
                   {copied ? (
                     <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -100,6 +139,30 @@ export function AboutModal({ isOpen, onClose, version }: AboutModalProps) {
                   )}
                 </button>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between py-2 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Build Commit</span>
+              {GIT_COMMIT !== "dev" ? (
+                <a
+                  href={`${GITHUB_REPO_URL}/commit/${GIT_COMMIT}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-mono font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                >
+                  {GIT_COMMIT}
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              ) : (
+                <span className="font-mono text-slate-600">dev</span>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between py-2 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Built On</span>
+              <span className="font-mono text-slate-800">
+                {formatBuildTime(BUILD_TIME)}
+              </span>
             </div>
 
             <div className="flex items-center justify-between py-2 border-b border-slate-100">
