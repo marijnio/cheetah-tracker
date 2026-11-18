@@ -639,7 +639,7 @@ export function DashboardClient({
 
       {/* Modern Fixed Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 h-dvh lg:h-auto lg:min-h-dvh bg-white border-r border-slate-200/90 flex flex-col transition-all duration-200 ease-in-out lg:static ${isSidebarCollapsed ? "w-18" : "w-64 max-w-[82vw]"
+        className={`fixed top-0 bottom-0 left-0 z-50 h-dvh bg-white border-r border-slate-200/90 flex flex-col transition-all duration-200 ease-in-out lg:sticky lg:top-0 lg:bottom-auto lg:left-auto lg:z-30 lg:self-start lg:shrink-0 ${isSidebarCollapsed ? "w-18" : "w-64 max-w-[82vw]"
           } ${isMobileSidebarOpen
             ? "translate-x-0"
             : "-translate-x-full lg:translate-x-0"
@@ -647,7 +647,7 @@ export function DashboardClient({
       >
         {/* App Logo & Title */}
         <div
-          className={`h-18 flex items-center border-b border-slate-100 transition-all ${isSidebarCollapsed ? "px-0 justify-center" : "px-4 justify-between"
+          className={`h-18 shrink-0 flex items-center border-b border-slate-100 transition-all ${isSidebarCollapsed ? "px-0 justify-center" : "px-4 justify-between"
             }`}
         >
           <div
@@ -707,7 +707,7 @@ export function DashboardClient({
 
         {/* Expand button when sidebar is collapsed */}
         {isSidebarCollapsed && (
-          <div className="hidden lg:flex justify-center pt-2">
+          <div className="hidden lg:flex justify-center pt-2 shrink-0">
             <button
               type="button"
               onClick={() => setIsSidebarCollapsed(false)}
@@ -720,7 +720,7 @@ export function DashboardClient({
         )}
 
         {/* Sidebar Menu Items */}
-        <div className="p-3 space-y-1.5 flex-1 overflow-y-auto">
+        <div className="p-3 space-y-1.5 flex-1 min-h-0 overflow-y-auto">
           <div
             className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 ${isSidebarCollapsed ? "text-center" : ""
               }`}
@@ -769,7 +769,7 @@ export function DashboardClient({
         </div>
 
         {/* Sidebar Footer Info */}
-        <div className="p-3 border-t border-slate-100 space-y-2">
+        <div className="p-3 border-t border-slate-100 space-y-2 shrink-0">
           {!isSidebarCollapsed ? (
             <>
               <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-100 text-[11px] text-slate-500 space-y-1.5">
