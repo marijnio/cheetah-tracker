@@ -580,8 +580,20 @@ export function TradeTable({
                 Ticker {renderSortIcon("ticker")}
               </th>
 
-              {/* 2. Timeline / Days Held */}
-              <th className="py-3.5 px-3 whitespace-nowrap">
+              {/* 2. Latest Price / 1D Change (Exit price for closed trades) */}
+              <th
+                onClick={() => handleSort("latestPrice")}
+                className="py-3.5 px-3 text-right cursor-pointer hover:text-slate-900 whitespace-nowrap"
+                title="Latest market price & 1D change for open trades, exit price for closed trades"
+              >
+                Latest Price{" "}
+                <span className="text-slate-300 font-normal">/</span>{" "}
+                <span className="text-slate-400 font-normal">1D</span>{" "}
+                {renderSortIcon("latestPrice")}
+              </th>
+
+              {/* 3. Timeline / Days Held */}
+              <th className="py-3.5 px-3 whitespace-nowrap border-l border-slate-200/60">
                 <span
                   onClick={() => handleSort("startDate")}
                   className="cursor-pointer hover:text-slate-900"
@@ -638,15 +650,6 @@ export function TradeTable({
                 </div>
               </th>
 
-              {/* 4. Latest Price (Exit price for closed trades) */}
-              <th
-                onClick={() => handleSort("latestPrice")}
-                className="py-3.5 px-3 text-right cursor-pointer hover:text-slate-900 whitespace-nowrap"
-                title="Latest market price for open trades, exit price for closed trades"
-              >
-                Latest Price {renderSortIcon("latestPrice")}
-              </th>
-
               {/* 4a. Market Value / Total Sell Value (€) */}
               <th
                 onClick={() => handleSort("latestValueEur")}
@@ -654,14 +657,6 @@ export function TradeTable({
                 title="Sort by Current Market Value / Total Sell Value (€)"
               >
                 Value € {renderSortIcon("latestValueEur")}
-              </th>
-
-              {/* 4b. 1D Change */}
-              <th
-                className="py-3.5 px-3 text-right whitespace-nowrap"
-                title="Today's change vs previous close (open trades only)"
-              >
-                1D Change
               </th>
 
               {/* 5. R-Multiple */}
@@ -711,7 +706,7 @@ export function TradeTable({
             {sortedTrades.length === 0 ? (
               <tr>
                 <td
-                  colSpan={13}
+                  colSpan={12}
                   className="py-12 text-center text-slate-400 text-sm"
                 >
                   No trades match the current filters.
@@ -826,8 +821,123 @@ export function TradeTable({
                       </div>
                     </td>
 
-                    {/* 2. Timeline (Dates + Trading Days Held) */}
-                    <td className="py-3 px-3 whitespace-nowrap">
+                    {/* 2. Latest Price / 1D Change (Exit price for closed trades) */}
+                    <td className="py-3 px-3 text-right whitespace-nowrap">
+                      {(() => {
+                        const canSync =
+                          isOpen &&
+                          isYahoo &&
+                          !!onSyncSecurityQuote &&
+                          !!linkedSecurity;
+                        const isSyncingRow =
+                          !!linkedSecurity &&
+                          syncingSecurityId === linkedSecurity.id;
+                        const isError =
+                          isOpen && trade.quoteStatus === "ERROR";
+                        const isStale = isOpen && !isError && ageInfo.isDaysOld;
+
+                        const dotClass = !isOpen
+                          ? "bg-slate-300"
+                          : isError
+                            ? "bg-rose-500"
+                            : isStale
+                              ? "bg-amber-500"
+                              : "bg-emerald-500";
+
+                        const statusLabel = !isOpen
+                          ? "Exit"
+                          : isSyncingRow
+                            ? "Syncing…"
+                            : isError
+                              ? "Quote error"
+                              : ageInfo.label;
+
+                        const statusTitle = !isOpen
+                          ? `Exit price on ${trade.endDate ?? "close"}`
+                          : isError
+                            ? `${trade.quoteError || "Error fetching quote"}${canSync ? " — click to retry" : ""}`
+                            : `${ageInfo.tooltip}${canSync ? " — click to refresh" : ""}`;
+
+                        const statusContent = (
+                          <>
+                            {isSyncingRow ? (
+                              <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-500" />
+                            ) : (
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`}
+                              />
+                            )}
+                            <span>{statusLabel}</span>
+                            {canSync && !isSyncingRow && (
+                              <RefreshCw className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            )}
+                          </>
+                        );
+
+                        const statusClass = `inline-flex items-center gap-1 ${isError
+                          ? "text-rose-500"
+                          : isStale
+                            ? "text-amber-600"
+                            : "text-slate-400"
+                          }`;
+
+                        return (
+                          <div className="flex flex-col items-end">
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              <span
+                                className={`font-semibold tabular-nums ${isOpen ? "text-slate-900" : "text-slate-700"
+                                  }`}
+                              >
+                                {formatLocalPrice(
+                                  trade.latestPrice,
+                                  trade.currency
+                                )}
+                              </span>
+                              {isOpen && dayChangePct !== null && (
+                                <span
+                                  className={`px-1.5 py-0.2 rounded text-[10px] font-semibold tabular-nums ${dayChangePct >= 0
+                                    ? "bg-emerald-50 text-emerald-600"
+                                    : "bg-rose-50 text-rose-500"
+                                    }`}
+                                  title={`1D change vs previous close (${formatLocalPrice(
+                                    previousClose,
+                                    trade.currency
+                                  )})`}
+                                >
+                                  {dayChangePct >= 0 ? "+" : ""}
+                                  {dayChangePct.toFixed(2)}%
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-end text-[10px] mt-0.5">
+                              {canSync ? (
+                                <button
+                                  type="button"
+                                  disabled={isSyncingRow}
+                                  onClick={() =>
+                                    handleSingleSyncQuote(linkedSecurity!.id)
+                                  }
+                                  className={`${statusClass} cursor-pointer hover:text-blue-600 disabled:cursor-wait`}
+                                  title={statusTitle}
+                                >
+                                  {statusContent}
+                                </button>
+                              ) : (
+                                <span
+                                  className={`${statusClass} cursor-help`}
+                                  title={statusTitle}
+                                >
+                                  {statusContent}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </td>
+
+                    {/* 3. Timeline (Dates + Trading Days Held) */}
+                    <td className="py-3 px-3 whitespace-nowrap border-l border-slate-100">
                       <div className="flex items-center gap-1.5 text-slate-700 font-medium">
                         <span>{trade.startDate}</span>
                         {isOpen ? (
@@ -900,104 +1010,6 @@ export function TradeTable({
                       </div>
                     </td>
 
-                    {/* 4. Latest / Exit Price */}
-                    <td className="py-3 px-3 text-right whitespace-nowrap">
-                      {(() => {
-                        const canSync =
-                          isOpen &&
-                          isYahoo &&
-                          !!onSyncSecurityQuote &&
-                          !!linkedSecurity;
-                        const isSyncingRow =
-                          !!linkedSecurity &&
-                          syncingSecurityId === linkedSecurity.id;
-                        const isError =
-                          isOpen && trade.quoteStatus === "ERROR";
-                        const isStale = isOpen && !isError && ageInfo.isDaysOld;
-
-                        const dotClass = !isOpen
-                          ? "bg-slate-300"
-                          : isError
-                            ? "bg-rose-500"
-                            : isStale
-                              ? "bg-amber-500"
-                              : "bg-emerald-500";
-
-                        const statusLabel = !isOpen
-                          ? "Exit"
-                          : isSyncingRow
-                            ? "Syncing…"
-                            : isError
-                              ? "Quote error"
-                              : ageInfo.label;
-
-                        const statusTitle = !isOpen
-                          ? `Exit price on ${trade.endDate ?? "close"}`
-                          : isError
-                            ? `${trade.quoteError || "Error fetching quote"}${canSync ? " — click to retry" : ""}`
-                            : `${ageInfo.tooltip}${canSync ? " — click to refresh" : ""}`;
-
-                        const statusContent = (
-                          <>
-                            {isSyncingRow ? (
-                              <RefreshCw className="w-2.5 h-2.5 animate-spin text-blue-500" />
-                            ) : (
-                              <span
-                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`}
-                              />
-                            )}
-                            <span>{statusLabel}</span>
-                            {canSync && !isSyncingRow && (
-                              <RefreshCw className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            )}
-                          </>
-                        );
-
-                        const statusClass = `inline-flex items-center gap-1 ${isError
-                          ? "text-rose-500"
-                          : isStale
-                            ? "text-amber-600"
-                            : "text-slate-400"
-                          }`;
-
-                        return (
-                          <div className="flex flex-col items-end">
-                            <span
-                              className={`font-semibold tabular-nums ${isOpen ? "text-slate-900" : "text-slate-700"
-                                }`}
-                            >
-                              {formatLocalPrice(
-                                trade.latestPrice,
-                                trade.currency
-                              )}
-                            </span>
-                            <div className="flex items-center justify-end text-[10px] mt-0.5">
-                              {canSync ? (
-                                <button
-                                  type="button"
-                                  disabled={isSyncingRow}
-                                  onClick={() =>
-                                    handleSingleSyncQuote(linkedSecurity!.id)
-                                  }
-                                  className={`${statusClass} cursor-pointer hover:text-blue-600 disabled:cursor-wait`}
-                                  title={statusTitle}
-                                >
-                                  {statusContent}
-                                </button>
-                              ) : (
-                                <span
-                                  className={`${statusClass} cursor-help`}
-                                  title={statusTitle}
-                                >
-                                  {statusContent}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </td>
-
                     {/* 4a. Market Value / Total Sell Value (€) */}
                     <td className="py-3 px-3 text-right whitespace-nowrap">
                       <span
@@ -1006,35 +1018,6 @@ export function TradeTable({
                       >
                         {formatEurValue(trade.latestValueEur)}
                       </span>
-                    </td>
-
-                    {/* 4b. 1D Change */}
-                    <td className="py-3 px-3 text-right whitespace-nowrap">
-                      {isOpen && dayChangePct !== null ? (
-                        <div
-                          className="flex flex-col items-end"
-                          title={`1D change vs previous close (${formatLocalPrice(
-                            previousClose,
-                            trade.currency
-                          )})`}
-                        >
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[11px] font-semibold tabular-nums ${dayChangePct >= 0
-                              ? "bg-emerald-50 text-emerald-600"
-                              : "bg-rose-50 text-rose-500"
-                              }`}
-                          >
-                            {dayChangePct >= 0 ? "+" : ""}
-                            {dayChangePct.toFixed(2)}%
-                          </span>
-                          <span className="text-[10px] text-slate-400 mt-0.5 tabular-nums">
-                            {dayDiff !== null && dayDiff > 0 ? "+" : ""}
-                            {formatLocalPrice(dayDiff, trade.currency)}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
                     </td>
 
                     {/* 5. R-Multiple Pill (Primary Minervini Performance Metric) */}

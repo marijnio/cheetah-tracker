@@ -59,7 +59,7 @@ interface DashboardClientProps {
 }
 
 type NavSection = "TRADES" | "EQUITY" | "SECURITIES" | "FOREX" | "SETTINGS";
-type TradeFilterTab = "ALL" | "OPEN" | "CLOSED" | "TRIMMED";
+type TradeFilterTab = "OPEN" | "ALL" | "CLOSED" | "TRIMMED";
 
 export function DashboardClient({
   currentUser,
@@ -77,7 +77,7 @@ export function DashboardClient({
     useState<ForexPairRecord[]>(initialForexPairs);
 
   const [activeSection, setActiveSection] = useState<NavSection>("TRADES");
-  const [tradeFilter, setTradeFilter] = useState<TradeFilterTab>("ALL");
+  const [tradeFilter, setTradeFilter] = useState<TradeFilterTab>("OPEN");
   const [sectorFilter, setSectorFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [kpiScope, setKpiScope] = useState<"GLOBAL" | "FILTERED">("GLOBAL");
@@ -967,8 +967,8 @@ export function DashboardClient({
               <nav className="flex items-center gap-4 sm:gap-6 mt-3.5 sm:mt-5 -mb-px overflow-x-auto no-scrollbar">
                 {(
                   [
-                    { id: "ALL", label: "Summary (All)", count: trades.length },
                     { id: "OPEN", label: "Open Positions", count: openCount },
+                    { id: "ALL", label: "Summary (All)", count: trades.length },
                     { id: "CLOSED", label: "Closed Trades", count: closedCount },
                     { id: "TRIMMED", label: "2R Trimmed", count: trimmedCount },
                   ] as const
