@@ -10,11 +10,15 @@ import {
   getLiveQuoteMap,
   getLiveFxMap,
 } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   try {
     const body = (await request.json()) as {
       csvContent?: string;
@@ -64,19 +68,20 @@ export async function POST(request: Request) {
 
     const importedCount = bulkInsertTrades(
       parsedItems,
+      auth.user.id,
       undefined,
       Boolean(body.replaceExisting)
     );
 
-    const rawTrades = getAllTrades();
+    const rawTrades = getAllTrades(auth.user.id);
     const trades = computeTradesWithMetrics(
       rawTrades,
-      getLiveQuoteMap(),
-      getLiveFxMap()
+      getLiveQuoteMap(auth.user.id),
+      getLiveFxMap(auth.user.id)
     );
     const kpis = computePortfolioKPIs(trades);
-    const securities = getAllSecurities();
-    const forexPairs = getAllForexPairs();
+    const securities = getAllSecurities(auth.user.id);
+    const forexPairs = getAllForexPairs(auth.user.id);
 
     return NextResponse.json({
       importedCount,

@@ -7,25 +7,29 @@ import {
   getLiveQuoteMap,
   getLiveFxMap,
 } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 import type { NewTradeInput } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
-function buildFullPayload() {
-  const rawTrades = getAllTrades();
-  const quoteMap = getLiveQuoteMap();
-  const fxMap = getLiveFxMap();
+function buildFullPayload(userId: number) {
+  const rawTrades = getAllTrades(userId);
+  const quoteMap = getLiveQuoteMap(userId);
+  const fxMap = getLiveFxMap(userId);
   const trades = computeTradesWithMetrics(rawTrades, quoteMap, fxMap);
   const kpis = computePortfolioKPIs(trades);
-  const securities = getAllSecurities();
-  const forexPairs = getAllForexPairs();
+  const securities = getAllSecurities(userId);
+  const forexPairs = getAllForexPairs(userId);
   return { trades, kpis, securities, forexPairs };
 }
 
 export async function GET() {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   try {
-    return NextResponse.json(buildFullPayload());
+    return NextResponse.json(buildFullPayload(auth.user.id));
   } catch (error) {
     console.error("GET /api/trades error:", error);
     return NextResponse.json(
@@ -36,6 +40,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   try {
     const body = (await request.json()) as NewTradeInput;
 
@@ -83,11 +90,16 @@ export async function POST(request: Request) {
         body.fxRateToEur !== undefined && body.fxRateToEur !== null
           ? Number(body.fxRateToEur)
           : undefined,
+      entryFxRateToEur:
+        body.entryFxRateToEur !== undefined && body.entryFxRateToEur !== null
+          ? Number(body.entryFxRateToEur)
+          : undefined,
+      positionGroupId: body.positionGroupId ?? null,
       notes: body.notes || null,
-    });
+    }, auth.user.id);
 
     return NextResponse.json(
-      { created, ...buildFullPayload() },
+      { created, ...buildFullPayload(auth.user.id) },
       { status: 201 }
     );
   } catch (error) {

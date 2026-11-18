@@ -1,8 +1,31 @@
 export type QuoteProviderType = "YAHOO" | "MANUAL";
 export type FxProviderType = "YAHOO" | "FRANKFURTER" | "MANUAL";
 
+export interface UserRecord {
+  id: number;
+  username: string;
+  passwordHash: string;
+  isAdmin: boolean;
+  cashBalance: number;
+  riskPercent: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicUser {
+  id: number;
+  username: string;
+  isAdmin: boolean;
+  cashBalance: number;
+  riskPercent: number;
+  createdAt: string;
+  updatedAt: string;
+  tradeCount?: number;
+}
+
 export interface SecurityRecord {
   id: number;
+  userId?: number | null;
   ticker: string; // Unified ticker symbol used for both display and quote fetching, e.g., 'NVDA', 'ASML.AS', 'INVE-B.ST'
   name: string; // Company / Security name, e.g., 'NVIDIA Corporation'
   isin: string | null;
@@ -41,6 +64,7 @@ export interface NewSecurityInput {
 
 export interface ForexPairRecord {
   id: number;
+  userId?: number | null;
   fromCurrency: string; // e.g. 'USD', 'CAD', 'SEK', 'DKK', 'GBP'
   toCurrency: string; // 'EUR'
   pairLabel: string; // e.g. 'USD / EUR'
@@ -71,6 +95,7 @@ export interface NewForexPairInput {
 
 export interface TradeRecord {
   id: number;
+  userId?: number | null;
   securityId: number | null;
   ticker: string;
   securityName?: string;
@@ -128,9 +153,21 @@ export interface NewTradeInput {
 }
 
 export const SCHEMA_DDL = `
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    cash_balance REAL NOT NULL DEFAULT 25000,
+    risk_percent REAL NOT NULL DEFAULT 1.0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS securities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ticker TEXT NOT NULL UNIQUE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    ticker TEXT NOT NULL,
     name TEXT NOT NULL DEFAULT '',
     isin TEXT,
     gics_sector TEXT NOT NULL DEFAULT 'Uncategorized',
@@ -144,14 +181,16 @@ export const SCHEMA_DDL = `
     tradingview_url TEXT,
     notes TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    UNIQUE(user_id, ticker)
   );
 
   CREATE INDEX IF NOT EXISTS idx_securities_ticker ON securities(ticker);
 
   CREATE TABLE IF NOT EXISTS forex_pairs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_currency TEXT NOT NULL UNIQUE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    from_currency TEXT NOT NULL,
     to_currency TEXT NOT NULL DEFAULT 'EUR',
     pair_label TEXT NOT NULL,
     live_provider TEXT NOT NULL DEFAULT 'YAHOO',
@@ -163,11 +202,13 @@ export const SCHEMA_DDL = `
     sync_status TEXT NOT NULL DEFAULT 'PENDING',
     sync_error TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    UNIQUE(user_id, from_currency)
   );
 
   CREATE TABLE IF NOT EXISTS trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     security_id INTEGER REFERENCES securities(id) ON DELETE SET NULL,
     ticker TEXT NOT NULL,
     gics_sector TEXT NOT NULL DEFAULT 'Uncategorized',

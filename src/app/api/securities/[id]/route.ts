@@ -9,20 +9,21 @@ import {
   getLiveQuoteMap,
   getLiveFxMap,
 } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 import { fetchYahooQuote } from "@/lib/quote-provider";
 import type { NewSecurityInput } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
-function buildFullPayload() {
-  const rawTrades = getAllTrades();
-  const quoteMap = getLiveQuoteMap();
-  const fxMap = getLiveFxMap();
+function buildFullPayload(userId: number) {
+  const rawTrades = getAllTrades(userId);
+  const quoteMap = getLiveQuoteMap(userId);
+  const fxMap = getLiveFxMap(userId);
   const trades = computeTradesWithMetrics(rawTrades, quoteMap, fxMap);
   const kpis = computePortfolioKPIs(trades);
-  const securities = getAllSecurities();
-  const forexPairs = getAllForexPairs();
+  const securities = getAllSecurities(userId);
+  const forexPairs = getAllForexPairs(userId);
   return { trades, kpis, securities, forexPairs };
 }
 
@@ -30,6 +31,9 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   try {
     const { id } = await context.params;
     const secId = Number(id);
@@ -44,7 +48,7 @@ export async function PATCH(
       syncQuote?: boolean;
     };
 
-    let security = getSecurityById(secId);
+    let security = getSecurityById(secId, auth.user.id);
     if (!security) {
       return NextResponse.json(
         { error: "Security not found" },
@@ -53,11 +57,15 @@ export async function PATCH(
     }
 
     if (Object.keys(body).some((k) => k !== "syncQuote")) {
-      security = updateSecurityById(secId, {
-        ...body,
-        quoteStatus:
-          body.quoteProvider === "MANUAL" ? "MANUAL" : security.quoteStatus,
-      });
+      security = updateSecurityById(
+        secId,
+        {
+          ...body,
+          quoteStatus:
+            body.quoteProvider === "MANUAL" ? "MANUAL" : security.quoteStatus,
+        },
+        auth.user.id
+      );
     }
 
     let syncErrorMessage: string | null = null;
@@ -65,34 +73,42 @@ export async function PATCH(
     if (body.syncQuote && security) {
       try {
         const quote = await fetchYahooQuote(security.ticker, true);
-        security = updateSecurityById(secId, {
-          latestPrice: quote.regularMarketPrice,
-          previousClose: quote.previousClose,
-          name:
-            !security.name || security.name === security.ticker
-              ? quote.longName || quote.shortName || security.name
-              : security.name,
-          gicsSector:
-            security.gicsSector === "Uncategorized" && quote.sector
-              ? quote.sector
-              : security.gicsSector,
-          lastQuoteAt: new Date().toISOString(),
-          quoteStatus: "OK",
-          quoteError: null,
-        });
+        security = updateSecurityById(
+          secId,
+          {
+            latestPrice: quote.regularMarketPrice,
+            previousClose: quote.previousClose,
+            name:
+              !security.name || security.name === security.ticker
+                ? quote.longName || quote.shortName || security.name
+                : security.name,
+            gicsSector:
+              security.gicsSector === "Uncategorized" && quote.sector
+                ? quote.sector
+                : security.gicsSector,
+            lastQuoteAt: new Date().toISOString(),
+            quoteStatus: "OK",
+            quoteError: null,
+          },
+          auth.user.id
+        );
       } catch (err) {
         syncErrorMessage = err instanceof Error ? err.message : "Quote sync failed";
-        security = updateSecurityById(secId, {
-          quoteStatus: "ERROR",
-          quoteError: syncErrorMessage,
-        });
+        security = updateSecurityById(
+          secId,
+          {
+            quoteStatus: "ERROR",
+            quoteError: syncErrorMessage,
+          },
+          auth.user.id
+        );
       }
     }
 
     return NextResponse.json({
       security,
       error: syncErrorMessage || undefined,
-      ...buildFullPayload(),
+      ...buildFullPayload(auth.user.id),
     });
   } catch (error) {
     console.error("PATCH /api/securities/[id] error:", error);
@@ -107,6 +123,9 @@ export async function DELETE(
   _request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   try {
     const { id } = await context.params;
     const secId = Number(id);
@@ -117,7 +136,7 @@ export async function DELETE(
       );
     }
 
-    const deleted = deleteSecurityById(secId);
+    const deleted = deleteSecurityById(secId, auth.user.id);
     if (!deleted) {
       return NextResponse.json(
         { error: "Security not found" },
@@ -125,7 +144,7 @@ export async function DELETE(
       );
     }
 
-    return NextResponse.json({ deleted: true, ...buildFullPayload() });
+    return NextResponse.json({ deleted: true, ...buildFullPayload(auth.user.id) });
   } catch (error) {
     console.error("DELETE /api/securities/[id] error:", error);
     return NextResponse.json(

@@ -8,6 +8,7 @@ import {
   getLiveQuoteMap,
   getLiveFxMap,
 } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 import {
   fetchYahooQuote,
@@ -19,18 +20,21 @@ import { mapToYahooTicker } from "@/lib/ticker-mapper";
 
 export const dynamic = "force-dynamic";
 
-function buildFullPayload() {
-  const rawTrades = getAllTrades();
-  const quoteMap = getLiveQuoteMap();
-  const fxMap = getLiveFxMap();
+function buildFullPayload(userId: number) {
+  const rawTrades = getAllTrades(userId);
+  const quoteMap = getLiveQuoteMap(userId);
+  const fxMap = getLiveFxMap(userId);
   const trades = computeTradesWithMetrics(rawTrades, quoteMap, fxMap);
   const kpis = computePortfolioKPIs(trades);
-  const securities = getAllSecurities();
-  const forexPairs = getAllForexPairs();
+  const securities = getAllSecurities(userId);
+  const forexPairs = getAllForexPairs(userId);
   return { trades, kpis, securities, forexPairs };
 }
 
 export async function POST(request: Request) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   try {
     const body = (await request.json()) as {
       scope?: "OPEN_ONLY" | "ALL_SECURITIES" | "FOREX_ONLY";
@@ -98,8 +102,8 @@ export async function POST(request: Request) {
     let syncedForex = 0;
     const errors: Array<{ symbol: string; error: string }> = [];
 
-    const fxPairs = getAllForexPairs();
-    const allSec = getAllSecurities();
+    const fxPairs = getAllForexPairs(auth.user.id);
+    const allSec = getAllSecurities(auth.user.id);
     const targetSec =
       scope === "FOREX_ONLY"
         ? []
@@ -137,27 +141,39 @@ export async function POST(request: Request) {
       const ecbRate = frankfurterMap[pair.fromCurrency.toUpperCase()];
 
       if (entry?.result) {
-        updateForexPairById(pair.id, {
-          latestRate: entry.result.regularMarketPrice,
-          previousClose: entry.result.previousClose,
-          lastUpdated: now,
-          syncStatus: "OK",
-          syncError: null,
-        });
+        updateForexPairById(
+          pair.id,
+          {
+            latestRate: entry.result.regularMarketPrice,
+            previousClose: entry.result.previousClose,
+            lastUpdated: now,
+            syncStatus: "OK",
+            syncError: null,
+          },
+          auth.user.id
+        );
         syncedForex++;
       } else if (ecbRate) {
-        updateForexPairById(pair.id, {
-          latestRate: ecbRate,
-          lastUpdated: now,
-          syncStatus: "OK",
-          syncError: null,
-        });
+        updateForexPairById(
+          pair.id,
+          {
+            latestRate: ecbRate,
+            lastUpdated: now,
+            syncStatus: "OK",
+            syncError: null,
+          },
+          auth.user.id
+        );
         syncedForex++;
       } else if (entry?.error) {
-        updateForexPairById(pair.id, {
-          syncStatus: "ERROR",
-          syncError: entry.error,
-        });
+        updateForexPairById(
+          pair.id,
+          {
+            syncStatus: "ERROR",
+            syncError: entry.error,
+          },
+          auth.user.id
+        );
         errors.push({ symbol: pair.yahooSymbol, error: entry.error });
       }
     }
@@ -168,23 +184,31 @@ export async function POST(request: Request) {
         batchResults[sec.ticker.toUpperCase()] ||
         batchResults[sec.ticker];
       if (entry?.result) {
-        updateSecurityById(sec.id, {
-          latestPrice: entry.result.regularMarketPrice,
-          previousClose: entry.result.previousClose,
-          name:
-            !sec.name || sec.name === sec.ticker
-              ? entry.result.longName || entry.result.shortName || sec.name
-              : sec.name,
-          lastQuoteAt: now,
-          quoteStatus: "OK",
-          quoteError: null,
-        });
+        updateSecurityById(
+          sec.id,
+          {
+            latestPrice: entry.result.regularMarketPrice,
+            previousClose: entry.result.previousClose,
+            name:
+              !sec.name || sec.name === sec.ticker
+                ? entry.result.longName || entry.result.shortName || sec.name
+                : sec.name,
+            lastQuoteAt: now,
+            quoteStatus: "OK",
+            quoteError: null,
+          },
+          auth.user.id
+        );
         syncedSecurities++;
       } else if (entry?.error) {
-        updateSecurityById(sec.id, {
-          quoteStatus: "ERROR",
-          quoteError: entry.error,
-        });
+        updateSecurityById(
+          sec.id,
+          {
+            quoteStatus: "ERROR",
+            quoteError: entry.error,
+          },
+          auth.user.id
+        );
         errors.push({ symbol: sec.ticker, error: entry.error });
       }
     }
@@ -193,7 +217,7 @@ export async function POST(request: Request) {
       syncedSecurities,
       syncedForex,
       errors: errors.length > 0 ? errors : undefined,
-      ...buildFullPayload(),
+      ...buildFullPayload(auth.user.id),
     });
   } catch (error) {
     console.error("POST /api/quotes/sync error:", error);

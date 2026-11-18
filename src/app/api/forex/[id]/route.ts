@@ -9,6 +9,7 @@ import {
   getLiveQuoteMap,
   getLiveFxMap,
 } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 import {
   fetchYahooQuote,
@@ -18,14 +19,14 @@ import type { NewForexPairInput } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
-function buildFullPayload() {
-  const rawTrades = getAllTrades();
-  const quoteMap = getLiveQuoteMap();
-  const fxMap = getLiveFxMap();
+function buildFullPayload(userId: number) {
+  const rawTrades = getAllTrades(userId);
+  const quoteMap = getLiveQuoteMap(userId);
+  const fxMap = getLiveFxMap(userId);
   const trades = computeTradesWithMetrics(rawTrades, quoteMap, fxMap);
   const kpis = computePortfolioKPIs(trades);
-  const securities = getAllSecurities();
-  const forexPairs = getAllForexPairs();
+  const securities = getAllSecurities(userId);
+  const forexPairs = getAllForexPairs(userId);
   return { trades, kpis, securities, forexPairs };
 }
 
@@ -33,6 +34,9 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   try {
     const { id } = await context.params;
     const fxId = Number(id);
@@ -44,7 +48,7 @@ export async function PATCH(
       syncNow?: boolean;
     };
 
-    let pair = getForexPairById(fxId);
+    let pair = getForexPairById(fxId, auth.user.id);
     if (!pair) {
       return NextResponse.json(
         { error: "Forex pair not found" },
@@ -53,46 +57,62 @@ export async function PATCH(
     }
 
     if (Object.keys(body).some((k) => k !== "syncNow")) {
-      pair = updateForexPairById(fxId, {
-        ...body,
-        syncStatus:
-          body.liveProvider === "MANUAL" ? "MANUAL" : pair.syncStatus,
-      });
+      pair = updateForexPairById(
+        fxId,
+        {
+          ...body,
+          syncStatus:
+            body.liveProvider === "MANUAL" ? "MANUAL" : pair.syncStatus,
+        },
+        auth.user.id
+      );
     }
 
     if (body.syncNow && pair) {
       try {
         if (pair.liveProvider === "YAHOO") {
           const q = await fetchYahooQuote(pair.yahooSymbol, false);
-          pair = updateForexPairById(fxId, {
-            latestRate: q.regularMarketPrice,
-            previousClose: q.previousClose,
-            lastUpdated: new Date().toISOString(),
-            syncStatus: "OK",
-            syncError: null,
-          });
+          pair = updateForexPairById(
+            fxId,
+            {
+              latestRate: q.regularMarketPrice,
+              previousClose: q.previousClose,
+              lastUpdated: new Date().toISOString(),
+              syncStatus: "OK",
+              syncError: null,
+            },
+            auth.user.id
+          );
         } else if (pair.liveProvider === "FRANKFURTER") {
           const rate = await fetchFrankfurterFxToEur(
             pair.fromCurrency,
             "latest"
           );
-          pair = updateForexPairById(fxId, {
-            latestRate: rate,
-            lastUpdated: new Date().toISOString(),
-            syncStatus: "OK",
-            syncError: null,
-          });
+          pair = updateForexPairById(
+            fxId,
+            {
+              latestRate: rate,
+              lastUpdated: new Date().toISOString(),
+              syncStatus: "OK",
+              syncError: null,
+            },
+            auth.user.id
+          );
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "FX sync failed";
-        pair = updateForexPairById(fxId, {
-          syncStatus: "ERROR",
-          syncError: msg,
-        });
+        pair = updateForexPairById(
+          fxId,
+          {
+            syncStatus: "ERROR",
+            syncError: msg,
+          },
+          auth.user.id
+        );
       }
     }
 
-    return NextResponse.json({ pair, ...buildFullPayload() });
+    return NextResponse.json({ pair, ...buildFullPayload(auth.user.id) });
   } catch (error) {
     console.error("PATCH /api/forex/[id] error:", error);
     return NextResponse.json(
@@ -106,6 +126,9 @@ export async function DELETE(
   _request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireUser();
+  if (auth.error) return auth.error;
+
   try {
     const { id } = await context.params;
     const fxId = Number(id);
@@ -113,7 +136,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid forex ID" }, { status: 400 });
     }
 
-    const deleted = deleteForexPairById(fxId);
+    const deleted = deleteForexPairById(fxId, auth.user.id);
     if (!deleted) {
       return NextResponse.json(
         { error: "Forex pair not found" },
@@ -121,7 +144,7 @@ export async function DELETE(
       );
     }
 
-    return NextResponse.json({ deleted: true, ...buildFullPayload() });
+    return NextResponse.json({ deleted: true, ...buildFullPayload(auth.user.id) });
   } catch (error) {
     console.error("DELETE /api/forex/[id] error:", error);
     return NextResponse.json(

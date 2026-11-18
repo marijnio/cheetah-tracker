@@ -1,23 +1,38 @@
 import React from "react";
-import { getAllForexPairs, getLiveFxMap } from "@/lib/db";
+import { redirect } from "next/navigation";
+import {
+  getAllForexPairs,
+  getAllSecurities,
+  getAllTrades,
+  getLiveFxMap,
+  getLiveQuoteMap,
+} from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 import { DashboardClient } from "@/components/dashboard-client";
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
-  const fxMap = getLiveFxMap();
-  const forexPairs = getAllForexPairs();
+export default async function HomePage() {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
 
-  // Clean empty initial state: no sample trades, no sample securities
-  const trades = computeTradesWithMetrics([], {}, fxMap);
+  const rawTrades = getAllTrades(user.id);
+  const quoteMap = getLiveQuoteMap(user.id);
+  const fxMap = getLiveFxMap(user.id);
+  const trades = computeTradesWithMetrics(rawTrades, quoteMap, fxMap);
   const kpis = computePortfolioKPIs(trades);
+  const securities = getAllSecurities(user.id);
+  const forexPairs = getAllForexPairs(user.id);
 
   return (
     <DashboardClient
-      initialTrades={[]}
+      currentUser={user}
+      initialTrades={trades}
       initialKpis={kpis}
-      initialSecurities={[]}
+      initialSecurities={securities}
       initialForexPairs={forexPairs}
     />
   );
