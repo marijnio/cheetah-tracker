@@ -9,8 +9,12 @@ import {
   replacePortfolioForUser,
   toPublicUser,
 } from "@/lib/db";
+import type {
+  ForexPairRecord,
+  SecurityRecord,
+  TradeRecord,
+} from "@/lib/db/schema";
 import { requireUser } from "@/lib/auth";
-import { parsePortfolioXml } from "@/lib/portfolio-xml";
 import { computePortfolioKPIs, computeTradesWithMetrics } from "@/lib/trade-math";
 
 export const dynamic = "force-dynamic";
@@ -21,28 +25,32 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as {
-      xmlContent?: string;
-      fileName?: string;
+      trades?: TradeRecord[];
+      securities?: SecurityRecord[];
+      forexPairs?: ForexPairRecord[];
+      cashBalance?: number;
+      riskPercent?: number;
     };
 
-    if (!body.xmlContent || !body.xmlContent.trim()) {
+    if (!Array.isArray(body.trades)) {
       return NextResponse.json(
-        { error: "No XML content provided." },
+        { error: "Invalid portfolio payload: trades array is required." },
         { status: 400 }
       );
     }
 
-    const parsed = parsePortfolioXml(
-      body.xmlContent,
-      body.fileName || "portfolio.xml"
-    );
-
     replacePortfolioForUser(auth.user.id, {
-      trades: parsed.trades,
-      securities: parsed.securities,
-      forexPairs: parsed.forexPairs,
-      cashBalance: parsed.cashBalance,
-      riskPercent: parsed.riskPercent,
+      trades: body.trades,
+      securities: Array.isArray(body.securities) ? body.securities : [],
+      forexPairs: Array.isArray(body.forexPairs) ? body.forexPairs : [],
+      cashBalance:
+        typeof body.cashBalance === "number" && !Number.isNaN(body.cashBalance)
+          ? body.cashBalance
+          : 25000,
+      riskPercent:
+        typeof body.riskPercent === "number" && !Number.isNaN(body.riskPercent)
+          ? body.riskPercent
+          : 1.0,
     });
 
     const rawTrades = getAllTrades(auth.user.id);
@@ -67,7 +75,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          err instanceof Error ? err.message : "Failed to parse or import XML",
+          err instanceof Error ? err.message : "Failed to import portfolio",
       },
       { status: 400 }
     );

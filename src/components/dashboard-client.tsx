@@ -43,7 +43,10 @@ import type {
   ForexPairRecord,
   NewForexPairInput,
 } from "@/lib/db/schema";
-import { serializePortfolioToXml } from "@/lib/portfolio-xml";
+import {
+  serializePortfolioToXml,
+  parsePortfolioXml,
+} from "@/lib/portfolio-xml";
 import type { TrimTradeInput } from "@/lib/client-portfolio-store";
 
 interface DashboardClientProps {
@@ -185,10 +188,17 @@ export function DashboardClient({
 
   const handleImportXmlFile = async (file: File) => {
     const xmlContent = await file.text();
+    const parsed = parsePortfolioXml(xmlContent, file.name);
     const res = await fetch("/api/portfolio/import-xml", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ xmlContent, fileName: file.name }),
+      body: JSON.stringify({
+        cashBalance: parsed.cashBalance,
+        riskPercent: parsed.riskPercent,
+        trades: parsed.trades,
+        securities: parsed.securities,
+        forexPairs: parsed.forexPairs,
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
