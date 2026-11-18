@@ -241,7 +241,7 @@ export function TradeTable({
   return (
     <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-[0_1px_3px_rgba(15,23,42,0.03)]">
       {/* Top Toolbar (Portfolio Dividend Tracker Style) */}
-      <div className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 bg-white">
+      <div className="px-3.5 sm:px-5 py-3 sm:py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5 sm:gap-3 bg-white">
         {/* Left: Minimal Underline Search Input */}
         <div
           data-protonpass-ignore="true"
@@ -284,7 +284,7 @@ export function TradeTable({
           <select
             value={sectorFilter}
             onChange={(e) => onSectorFilterChange(e.target.value)}
-            className="bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-600 cursor-pointer"
+            className="bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-600 cursor-pointer max-w-full"
           >
             <option value="ALL">All GICS Sectors</option>
             {sectors.map((sec) => (
@@ -294,10 +294,33 @@ export function TradeTable({
             ))}
           </select>
 
+          <select
+            aria-label="Sort trades"
+            value={sortKey ?? ""}
+            onChange={(e) => {
+              const val = e.target.value as SortKey | "";
+              if (!val) {
+                setSortKey(null);
+              } else {
+                setSortKey(val);
+                setSortDir("desc");
+              }
+            }}
+            className="md:hidden bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-600 cursor-pointer"
+          >
+            <option value="">Sort: Default</option>
+            <option value="startDate">Entry Date</option>
+            <option value="gainLossEur">P&amp;L (€)</option>
+            <option value="gainLossPercent">Return (%)</option>
+            <option value="rMultiple">R-Multiple</option>
+            <option value="latestValueEur">Value (€)</option>
+            <option value="ticker">Ticker</option>
+          </select>
+
           <button
             type="button"
             onClick={onToggleKpiScope}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
           >
             <Layers className="w-3.5 h-3.5 text-slate-500" />
             <span>
@@ -307,8 +330,245 @@ export function TradeTable({
         </div>
       </div>
 
-      {/* High-Density Data Table */}
-      <div className="overflow-x-auto">
+      {/* Mobile Trade Cards (< md) */}
+      <div className="md:hidden divide-y divide-slate-100 border-t border-slate-200/80">
+        {sortedTrades.length === 0 ? (
+          <div className="py-12 px-4 text-center text-slate-400 text-sm">
+            No trades match your current filter. Click{" "}
+            <strong className="text-slate-700">+ Add Trade</strong> to record
+            a new position.
+          </div>
+        ) : (
+          sortedTrades.map((trade) => {
+            const isOpen = trade.isOpen;
+            const isGain = trade.gainLossEur >= 0;
+            const linkedSecurity =
+              securities?.find(
+                (s) => s.id === trade.securityId || s.ticker === trade.ticker
+              ) || null;
+            const quoteTimestamp =
+              linkedSecurity?.lastQuoteAt ?? trade.lastQuoteAt;
+            const ageInfo = getQuoteAgeInfo(quoteTimestamp);
+            const isYahoo =
+              (linkedSecurity?.quoteProvider ??
+                trade.quoteProvider ??
+                "YAHOO") === "YAHOO";
+            const previousClose =
+              linkedSecurity?.previousClose ?? trade.previousClose ?? null;
+            const dayDiff =
+              previousClose && previousClose > 0
+                ? trade.latestPrice - previousClose
+                : null;
+            const dayChangePct =
+              dayDiff !== null && previousClose && previousClose > 0
+                ? (dayDiff / previousClose) * 100
+                : null;
+            const hasReached2R = trade.latestPrice >= trade.moveStopAt;
+            const needsStopAction =
+              isOpen && !trade.stopMoved && hasReached2R;
+
+            return (
+              <div
+                key={trade.id}
+                onClick={() => onEditTrade(trade, "edit")}
+                className={`p-3.5 space-y-2.5 transition-colors cursor-pointer active:bg-slate-100/70 ${isOpen ? "bg-blue-50/15" : "bg-white"
+                  }`}
+              >
+                {/* Row 1: Ticker + Badges | P&L + R-Multiple + Actions */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-sm text-blue-600">
+                        {trade.ticker}
+                      </span>
+                      {trade.currency !== "USD" && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                          {trade.currency}
+                        </span>
+                      )}
+                      <span
+                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase tracking-wide ${isOpen
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-slate-100 text-slate-500"
+                          }`}
+                      >
+                        {isOpen ? "Open" : "Closed"}
+                      </span>
+                      {trade.positionGroupId && (
+                        <span
+                          className={`text-[9px] font-semibold px-1.5 py-0.2 rounded uppercase tracking-wide ${isOpen
+                            ? "bg-indigo-50 text-indigo-600 border border-indigo-200/70"
+                            : "bg-emerald-50 text-emerald-700 border border-emerald-200/70"
+                            }`}
+                        >
+                          {isOpen ? "Runner" : "Trim"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                      {trade.securityName &&
+                        trade.securityName !== trade.ticker
+                        ? `${trade.securityName} • ${trade.gicsSector}`
+                        : trade.gicsSector}
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-1.5 shrink-0">
+                    <div className="text-right tabular-nums">
+                      <div
+                        className={`text-sm font-bold leading-tight ${isGain ? "text-emerald-600" : "text-rose-600"
+                          }`}
+                      >
+                        {formatEurValue(trade.gainLossEur, true)}
+                      </div>
+                      <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                        <span
+                          className={`text-[11px] font-semibold ${isGain ? "text-emerald-600" : "text-rose-500"
+                            }`}
+                        >
+                          {trade.gainLossPercent >= 0 ? "+" : ""}
+                          {(trade.gainLossPercent * 100).toFixed(1)}%
+                        </span>
+                        <span
+                          className={`inline-block px-1.5 py-0.2 rounded text-[10px] ${getRMultiplePillStyle(
+                            trade.rMultiple
+                          )}`}
+                        >
+                          {trade.rMultiple >= 0 ? "+" : ""}
+                          {trade.rMultiple.toFixed(2)}R
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenMenu(trade, e)}
+                      aria-label={`Actions for ${trade.ticker}`}
+                      className={`p-1.5 -mr-1 rounded-lg transition-all cursor-pointer relative ${menuTrade?.id === trade.id
+                        ? "bg-blue-100 text-blue-700"
+                        : needsStopAction
+                          ? "text-amber-600 bg-amber-50 ring-1 ring-amber-300"
+                          : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                        }`}
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                      {needsStopAction && (
+                        <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 2: Compact Price & Position Metrics */}
+                <div className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50/90 border border-slate-100 px-2.5 py-2 text-[11px] tabular-nums">
+                  <div className="min-w-0">
+                    <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                      Entry
+                    </div>
+                    <div className="font-semibold text-slate-800 truncate">
+                      {formatLocalPrice(trade.buyPrice, trade.currency)}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      {trade.shares.toLocaleString("en-US")} sh
+                    </div>
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                      Stop / Risk
+                    </div>
+                    <div className="font-semibold text-slate-700 truncate">
+                      {formatLocalPrice(trade.initialStopLoss, trade.currency)}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      {(trade.initialRiskPercent * 100).toFixed(1)}%
+                      {trade.stopMoved && (
+                        <span className="ml-1 text-blue-600 font-semibold">
+                          • BE
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="min-w-0 text-right">
+                    <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                      {isOpen ? "Latest" : "Exit"}
+                    </div>
+                    <div className="font-semibold text-slate-900 truncate">
+                      {formatLocalPrice(trade.latestPrice, trade.currency)}
+                    </div>
+                    <div className="text-[10px]">
+                      {isOpen && dayChangePct !== null ? (
+                        <span
+                          className={`font-medium ${dayChangePct >= 0
+                            ? "text-emerald-600"
+                            : "text-rose-500"
+                            }`}
+                        >
+                          1D {dayChangePct >= 0 ? "+" : ""}
+                          {dayChangePct.toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">
+                          {formatEurValue(trade.latestValueEur)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 3: Timeline, Value & 2R Alert */}
+                <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 tabular-nums">
+                  <div className="flex items-center gap-1.5 min-w-0 truncate">
+                    <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                    <span className="truncate">
+                      {trade.startDate}
+                      {trade.endDate ? ` → ${trade.endDate}` : ""}
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span className="shrink-0">{trade.tradingDaysHeld}d</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isOpen && (
+                      <span className="text-slate-600 font-medium">
+                        {formatEurValue(trade.latestValueEur)}
+                      </span>
+                    )}
+                    {isOpen && isYahoo && ageInfo.isDaysOld && linkedSecurity && onSyncSecurityQuote && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSingleSyncQuote(linkedSecurity.id);
+                        }}
+                        disabled={syncingSecurityId === linkedSecurity.id}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold"
+                        title="Quote is stale — tap to refresh"
+                      >
+                        <RefreshCw
+                          className={`w-2.5 h-2.5 ${syncingSecurityId === linkedSecurity.id ? "animate-spin" : ""
+                            }`}
+                        />
+                        <span>Stale</span>
+                      </button>
+                    )}
+                    {needsStopAction && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-semibold">
+                        <AlertTriangle className="w-2.5 h-2.5 text-amber-600" />
+                        <span>2R Hit</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* High-Density Data Table (Desktop / Tablet >= md) */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs tabular-nums">
           <thead>
             <tr className="border-y border-slate-200/80 bg-[#f8fafc] text-[11px] font-semibold uppercase tracking-wider text-slate-500 select-none">

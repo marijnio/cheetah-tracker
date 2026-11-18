@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  X,
   ShieldCheck,
   Pencil,
   Settings,
@@ -568,6 +569,15 @@ export function DashboardClient({
     }
   }, [currentTotalEquity]);
 
+  React.useEffect(() => {
+    if (!isMobileSidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isMobileSidebarOpen]);
+
   const navMenuItems = [
     {
       id: "TRADES" as NavSection,
@@ -607,7 +617,7 @@ export function DashboardClient({
   ];
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex">
+    <div className="min-h-dvh w-full max-w-full overflow-x-clip bg-[#f8fafc] flex">
       {/* Mobile Sidebar Overlay */}
       {isMobileSidebarOpen && (
         <div
@@ -618,7 +628,7 @@ export function DashboardClient({
 
       {/* Modern Fixed Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-slate-200/90 flex flex-col transition-all duration-200 ease-in-out lg:static ${isSidebarCollapsed ? "w-18" : "w-64"
+        className={`fixed inset-y-0 left-0 z-50 h-dvh lg:h-auto lg:min-h-dvh bg-white border-r border-slate-200/90 flex flex-col transition-all duration-200 ease-in-out lg:static ${isSidebarCollapsed ? "w-18" : "w-64 max-w-[82vw]"
           } ${isMobileSidebarOpen
             ? "translate-x-0"
             : "-translate-x-full lg:translate-x-0"
@@ -663,14 +673,24 @@ export function DashboardClient({
             )}
           </div>
           {!isSidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() => setIsSidebarCollapsed(true)}
-              className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-              title="Collapse sidebar"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed(true)}
+                className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Collapse sidebar"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(false)}
+                className="flex lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                aria-label="Close navigation menu"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </>
           )}
         </div>
 
@@ -689,7 +709,7 @@ export function DashboardClient({
         )}
 
         {/* Sidebar Menu Items */}
-        <div className="p-3 space-y-1.5 flex-1">
+        <div className="p-3 space-y-1.5 flex-1 overflow-y-auto">
           <div
             className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 ${isSidebarCollapsed ? "text-center" : ""
               }`}
@@ -789,7 +809,7 @@ export function DashboardClient({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
-        <header className="bg-white border-b border-slate-200/80 sticky top-0 z-30">
+        <header className="bg-white border-b border-slate-200/80 lg:sticky lg:top-0 z-30">
           {notificationMsg && (
             <div className="bg-blue-600 text-white text-xs py-1.5 px-4 font-medium flex items-center justify-between animate-in fade-in slide-in-from-top-1">
               <div className="flex items-center gap-2">
@@ -805,8 +825,8 @@ export function DashboardClient({
               </button>
             </div>
           )}
-          <div className="px-4 sm:px-8 pt-5 pb-0">
-            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+          <div className="px-3.5 sm:px-8 pt-3.5 sm:pt-5 pb-0">
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 sm:gap-4">
               {/* Left: Mobile hamburger + Hero Value */}
               <div className="flex items-start gap-3 min-w-0">
                 <button
@@ -892,37 +912,39 @@ export function DashboardClient({
               {/* Right: Action Buttons */}
               <div className="flex flex-col lg:items-end gap-2.5 shrink-0">
                 {/* Action Buttons */}
-                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                <div className="grid grid-cols-3 sm:flex sm:flex-nowrap items-center gap-1.5 sm:gap-2">
                   <button
                     type="button"
                     onClick={() => handleOpenPositionSizer()}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
+                    className="inline-flex items-center justify-center gap-1.5 px-2 sm:px-3.5 py-2 sm:py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
                     title="Risk-First Position Sizing Calculator"
                   >
                     <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span>Position Sizer</span>
+                    <span className="sm:hidden">Sizer</span>
+                    <span className="hidden sm:inline">Position Sizer</span>
                   </button>
 
                   <button
                     type="button"
                     disabled={isSyncingAll}
                     onClick={() => handleBatchSync("OPEN_ONLY")}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                    className="inline-flex items-center justify-center gap-1.5 px-2 sm:px-3.5 py-2 sm:py-2.5 rounded-lg text-[11px] sm:text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
                     title="Sync live quotes & FX rates for open positions from Yahoo Finance"
                   >
                     <RefreshCw
                       className={`w-3.5 h-3.5 text-blue-600 shrink-0 ${isSyncingAll ? "animate-spin" : ""
                         }`}
                     />
-                    <span>{isSyncingAll ? "Syncing..." : "Sync Quotes"}</span>
+                    <span className="sm:hidden">{isSyncingAll ? "Sync..." : "Sync"}</span>
+                    <span className="hidden sm:inline">{isSyncingAll ? "Syncing..." : "Sync Quotes"}</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handleOpenCreate}
-                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors cursor-pointer whitespace-nowrap"
+                    className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-4 py-2 sm:py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors cursor-pointer whitespace-nowrap"
                   >
-                    <Plus className="w-4 h-4 stroke-[2.5] shrink-0" />
+                    <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5] shrink-0" />
                     <span>Add Trade</span>
                   </button>
                 </div>
@@ -931,7 +953,7 @@ export function DashboardClient({
 
             {/* Sub-header Filter Tabs (Active when in Trade Ledger view) */}
             {activeSection === "TRADES" ? (
-              <nav className="flex items-center gap-6 mt-5 -mb-px overflow-x-auto">
+              <nav className="flex items-center gap-4 sm:gap-6 mt-3.5 sm:mt-5 -mb-px overflow-x-auto no-scrollbar">
                 {(
                   [
                     { id: "ALL", label: "Summary (All)", count: trades.length },
@@ -970,7 +992,7 @@ export function DashboardClient({
         </header>
 
         {/* Main Viewport */}
-        <main className="p-4 sm:p-8 space-y-6 flex-1">
+        <main className="p-3 sm:p-8 space-y-4 sm:space-y-6 flex-1 min-w-0">
           {activeSection === "TRADES" && (
             <KpiCards
               kpis={displayedKpis}

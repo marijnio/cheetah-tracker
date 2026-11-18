@@ -210,14 +210,14 @@ export function PositionSizerModal({
       >
         <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/90 w-full max-w-2xl overflow-hidden flex flex-col my-auto">
           {/* Header */}
-          <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between bg-slate-50/70">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+          <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-slate-100 flex items-start justify-between gap-2 bg-slate-50/70">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
                 <ShieldCheck className="w-5 h-5 stroke-[2.2]" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-slate-900">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900">
                     Risk-First Position Sizing
                   </h2>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
@@ -232,13 +232,13 @@ export function PositionSizerModal({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="p-5 sm:p-6 space-y-5 overflow-y-auto max-h-[80vh]">
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto max-h-[82dvh]">
             {/* Informational Guidance Box */}
             <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200/80 text-xs text-blue-900 flex items-start gap-3">
               <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />

@@ -504,9 +504,9 @@ export function TradeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-2 sm:p-4">
       <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 bg-slate-50/70">
           <div>
             <h2 className="text-lg font-bold text-slate-900">
               {mode === "trim"
@@ -570,7 +570,7 @@ export function TradeModal({
 
           <form
             onSubmit={handleSubmit}
-            className="p-6 space-y-5 max-h-[82vh] overflow-y-auto"
+            className="p-4 sm:p-6 space-y-4 sm:space-y-5 max-h-[85dvh] overflow-y-auto"
           >
             {/* Connected Security Information */}
             {mode === "close" || mode === "trim" ? (
@@ -1007,7 +1007,7 @@ export function TradeModal({
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 pt-2 border-t border-slate-100">
               <div>
                 {initialTrade && onDeleteTrade && (
                   <button
