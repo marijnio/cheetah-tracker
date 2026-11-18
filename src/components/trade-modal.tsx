@@ -11,6 +11,7 @@ import {
   Clock,
   Trash2,
   LineChart,
+  Wallet,
 } from "lucide-react";
 import type { ComputedTrade } from "@/lib/trade-math";
 import type { TrimTradeInput } from "@/lib/client-portfolio-store";
@@ -61,6 +62,7 @@ interface TradeModalProps {
   } | null;
   securities: SecurityRecord[];
   forexPairs: ForexPairRecord[];
+  cashBalance?: number;
   mode?: "create" | "edit" | "close" | "trim";
   onNavigateToSecurities?: () => void;
   onOpenPositionSizer?: (params?: {
@@ -81,6 +83,7 @@ export function TradeModal({
   initialSizing,
   securities,
   forexPairs,
+  cashBalance,
   mode = "create",
   onNavigateToSecurities,
   onOpenPositionSizer,
@@ -102,6 +105,7 @@ export function TradeModal({
   const [fxRateToEur, setFxRateToEur] = useState("0.89338");
   const [stopMoved, setStopMoved] = useState(false);
   const [trimmedAt2R, setTrimmedAt2R] = useState(false);
+  const [deductFromCash, setDeductFromCash] = useState(true);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [fetchingEntryFx, setFetchingEntryFx] = useState(false);
@@ -117,6 +121,7 @@ export function TradeModal({
 
   useEffect(() => {
     if (!isOpen) return;
+    setDeductFromCash(!initialTrade && mode === "create");
     if (initialTrade) {
       setSelectedSecurityId(
         initialTrade.securityId ? String(initialTrade.securityId) : "NEW"
@@ -494,6 +499,7 @@ export function TradeModal({
           stopMoved,
           trimmedAt2R,
           notes: notes.trim() || null,
+          deductFromCash: !initialTrade && mode === "create" ? deductFromCash : undefined,
         },
         initialTrade?.id
       );
@@ -1006,6 +1012,82 @@ export function TradeModal({
                 </div>
               </div>
             </div>
+
+            {/* Cash Balance Deduction (Create Mode) */}
+            {!initialTrade && mode === "create" && (
+              <div
+                className={`rounded-xl border p-3.5 transition-colors ${
+                  deductFromCash
+                    ? "bg-emerald-50/50 border-emerald-200/80"
+                    : "bg-slate-50/70 border-slate-200/80"
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={deductFromCash}
+                      onChange={(e) => setDeductFromCash(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                      <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Deduct entry cost from Cash Balance</span>
+                    </span>
+                  </label>
+
+                  {cashBalance !== undefined && (
+                    <div className="text-xs tabular-nums flex items-center gap-1.5">
+                      <span className="text-slate-500">
+                        €{Math.round(cashBalance).toLocaleString("en-US")}
+                      </span>
+                      {deductFromCash && previewEntryEur > 0 && (
+                        <>
+                          <span className="text-slate-400">→</span>
+                          <span
+                            className={`font-bold ${
+                              previewEntryEur > cashBalance
+                                ? "text-amber-700"
+                                : "text-emerald-700"
+                            }`}
+                          >
+                            €
+                            {Math.round(
+                              Math.max(0, cashBalance - previewEntryEur)
+                            ).toLocaleString("en-US")}
+                          </span>
+                          <span className="text-[11px] font-medium text-slate-500">
+                            (-€
+                            {previewEntryEur.toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                            )
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {deductFromCash &&
+                  cashBalance !== undefined &&
+                  previewEntryEur > cashBalance && (
+                    <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-700">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>
+                        Entry cost exceeds available cash — cash balance will be set to €0.
+                      </span>
+                    </div>
+                  )}
+
+                {deductFromCash && endDate && (
+                  <div className="mt-1.5 text-[11px] text-slate-500">
+                    End date is set (closed trade) — uncheck if logging a past trade that is already reflected in your cash balance.
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 pt-2 border-t border-slate-100">
               <div>

@@ -6,6 +6,8 @@ import {
   createTrade,
   getLiveQuoteMap,
   getLiveFxMap,
+  getUserById,
+  updateUserPreferences,
 } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
@@ -98,8 +100,32 @@ export async function POST(request: Request) {
       notes: body.notes || null,
     }, auth.user.id);
 
+    let updatedUser = undefined;
+    if (body.deductFromCash === true) {
+      const entryFx =
+        created.currency.toUpperCase() === "EUR" ? 1.0 : created.entryFxRateToEur;
+      const entryCostEur = created.shares * created.buyPrice * entryFx;
+      if (Number.isFinite(entryCostEur) && entryCostEur > 0) {
+        const currentUser = getUserById(auth.user.id);
+        if (currentUser) {
+          const nextCashBalance = Math.max(
+            0,
+            Number((currentUser.cashBalance - entryCostEur).toFixed(2))
+          );
+          updatedUser =
+            updateUserPreferences(auth.user.id, {
+              cashBalance: nextCashBalance,
+            }) ?? undefined;
+        }
+      }
+    }
+
     return NextResponse.json(
-      { created, ...buildFullPayload(auth.user.id) },
+      {
+        created,
+        ...buildFullPayload(auth.user.id),
+        ...(updatedUser ? { user: updatedUser } : {}),
+      },
       { status: 201 }
     );
   } catch (error) {

@@ -131,6 +131,12 @@ export function DashboardClient({
     if (data.user) {
       setCashBalance(data.user.cashBalance);
       setRiskPercent(data.user.riskPercent);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(
+          "cheetah_cash_balance",
+          String(data.user.cashBalance)
+        );
+      }
     }
   };
 
@@ -349,6 +355,11 @@ export function DashboardClient({
       throw new Error(payload.error || "Failed to save trade");
     }
     applyServerPayload(payload);
+    if (tradeId === undefined && payload.user) {
+      flashNotification(
+        `Added ${data.ticker} — cash balance updated to €${Math.round(payload.user.cashBalance).toLocaleString("en-US")}.`
+      );
+    }
   };
 
   const handleTrimTrade = async (tradeId: number, data: TrimTradeInput) => {
@@ -1101,6 +1112,7 @@ export function DashboardClient({
         initialSizing={initialSizing}
         securities={securities}
         forexPairs={forexPairs}
+        cashBalance={cashBalance}
         mode={modalMode}
         onNavigateToSecurities={() => setActiveSection("SECURITIES")}
         onOpenPositionSizer={handleOpenPositionSizer}

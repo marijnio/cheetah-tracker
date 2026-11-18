@@ -150,6 +150,7 @@ export interface NewTradeInput {
   fxRateToEur?: number;
   positionGroupId?: string | null;
   notes?: string | null;
+  deductFromCash?: boolean;
 }
 
 export const SCHEMA_DDL = `
