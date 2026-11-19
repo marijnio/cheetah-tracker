@@ -898,7 +898,7 @@ export function DashboardClient({
                             }
                           )
                         }{" "}
-                        Total P & amp;L
+                        Total P&amp;L
                       </span>
                     </span>
                   </div>
