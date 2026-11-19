@@ -270,28 +270,60 @@ export function TradeTable({
             </button>
           )}
 
-          <select
-            aria-label="Sort trades"
-            value={sortKey ?? ""}
-            onChange={(e) => {
-              const val = e.target.value as SortKey | "";
-              if (!val) {
-                setSortKey(null);
-              } else {
-                setSortKey(val);
-                setSortDir("desc");
-              }
-            }}
-            className="md:hidden bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-600 cursor-pointer"
-          >
-            <option value="">Sort: Default</option>
-            <option value="startDate">Entry Date</option>
-            <option value="gainLossEur">P&amp;L (€)</option>
-            <option value="gainLossPercent">Return (%)</option>
-            <option value="rMultiple">R-Multiple</option>
-            <option value="latestValueEur">Value (€)</option>
-            <option value="ticker">Ticker</option>
-          </select>
+          <div className="md:hidden flex items-center gap-1.5">
+            <select
+              aria-label="Sort trades"
+              value={sortKey ?? ""}
+              onChange={(e) => {
+                const val = e.target.value as SortKey | "";
+                if (!val) {
+                  setSortKey(null);
+                } else {
+                  if (!sortKey) {
+                    setSortDir("desc");
+                  }
+                  setSortKey(val);
+                }
+              }}
+              className="bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-600 cursor-pointer"
+            >
+              <option value="">Sort: Default</option>
+              <option value="startDate">Entry Date</option>
+              <option value="gainLossEur">P&amp;L (€)</option>
+              <option value="gainLossPercent">Return (%)</option>
+              <option value="rMultiple">R-Multiple</option>
+              <option value="latestValueEur">Value (€)</option>
+              <option value="ticker">Ticker</option>
+            </select>
+
+            {sortKey && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
+                }
+                aria-label={`Sort direction: ${sortDir === "asc" ? "Ascending" : "Descending"}. Click to toggle.`}
+                title={
+                  sortDir === "asc"
+                    ? "Sorted ascending (click for descending)"
+                    : "Sorted descending (click for ascending)"
+                }
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer"
+              >
+                {sortDir === "asc" ? (
+                  <>
+                    <ArrowUp className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Asc</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowDown className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Desc</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
