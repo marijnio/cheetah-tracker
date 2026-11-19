@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   Circle,
   Scissors,
-  Layers,
   RefreshCw,
   AlertTriangle,
   AlertCircle,
@@ -37,13 +36,8 @@ interface TradeTableProps {
   onSyncSecurityQuote?: (securityId: number) => Promise<void>;
   onSyncAllOpenQuotes?: () => Promise<void>;
   isSyncingAll?: boolean;
-  sectorFilter: string;
-  onSectorFilterChange: (next: string) => void;
   searchQuery: string;
   onSearchQueryChange: (next: string) => void;
-  sectors: string[];
-  kpiScope: "GLOBAL" | "FILTERED";
-  onToggleKpiScope: () => void;
 }
 
 type SortKey =
@@ -115,13 +109,8 @@ export function TradeTable({
   onSyncSecurityQuote,
   onSyncAllOpenQuotes,
   isSyncingAll,
-  sectorFilter,
-  onSectorFilterChange,
   searchQuery,
   onSearchQueryChange,
-  sectors,
-  kpiScope,
-  onToggleKpiScope,
 }: TradeTableProps) {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -282,19 +271,6 @@ export function TradeTable({
           )}
 
           <select
-            value={sectorFilter}
-            onChange={(e) => onSectorFilterChange(e.target.value)}
-            className="bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-600 cursor-pointer max-w-full"
-          >
-            <option value="ALL">All GICS Sectors</option>
-            {sectors.map((sec) => (
-              <option key={sec} value={sec}>
-                {sec}
-              </option>
-            ))}
-          </select>
-
-          <select
             aria-label="Sort trades"
             value={sortKey ?? ""}
             onChange={(e) => {
@@ -316,17 +292,6 @@ export function TradeTable({
             <option value="latestValueEur">Value (€)</option>
             <option value="ticker">Ticker</option>
           </select>
-
-          <button
-            type="button"
-            onClick={onToggleKpiScope}
-            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
-          >
-            <Layers className="w-3.5 h-3.5 text-slate-500" />
-            <span>
-              KPIs: {kpiScope === "GLOBAL" ? "All Trades" : "Filtered"}
-            </span>
-          </button>
         </div>
       </div>
 
@@ -791,8 +756,8 @@ export function TradeTable({
                           {trade.positionGroupId && (
                             <span
                               className={`text-[9px] font-semibold px-1.5 py-0.2 rounded uppercase tracking-wide ${isOpen
-                                  ? "bg-indigo-50 text-indigo-600 border border-indigo-200/70"
-                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200/70"
+                                ? "bg-indigo-50 text-indigo-600 border border-indigo-200/70"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200/70"
                                 }`}
                               title={
                                 isOpen
