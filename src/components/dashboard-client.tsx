@@ -799,9 +799,9 @@ export function DashboardClient({
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Sticky Top Bar */}
-        <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-xs border-b border-slate-200/80 px-3.5 py-2.5 flex items-center justify-between lg:hidden">
+      <div className="flex-1 flex flex-col min-w-0 pt-12 lg:pt-0">
+        {/* Mobile Fixed Top Bar */}
+        <div className="fixed top-0 inset-x-0 z-30 h-12 bg-white/95 backdrop-blur-xs border-b border-slate-200/80 px-3.5 flex items-center justify-between lg:hidden">
           <div className="flex items-center gap-2.5">
             <button
               type="button"
@@ -834,266 +834,266 @@ export function DashboardClient({
         </div>
 
         {/* Top Header */}
-        <header className="bg-white border-b border-slate-200/80 lg:sticky lg:top-0 z-30">
-          {notificationMsg && (
-            <div className="bg-blue-600 text-white text-xs py-1.5 px-4 font-medium flex items-center justify-between animate-in fade-in slide-in-from-top-1">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>{notificationMsg}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setNotificationMsg(null)}
-                className="text-blue-100 hover:text-white cursor-pointer ml-3"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-          <div className="px-3.5 sm:px-8 pt-3 sm:pt-5 pb-0">
-
-            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 sm:gap-4">
-              {/* Left: Hero Value */}
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                    {activeSection === "TRADES"
-                      ? "Trading Portfolio • Total Account Value"
-                      : activeSection === "EQUITY"
-                        ? "Performance Analytics • Total Account Value"
-                        : activeSection === "SECURITIES"
-                          ? "Master Entity Repository • Securities & Quote Feeds"
-                          : activeSection === "FOREX"
-                            ? "Currency Conversion • Live & Historical ECB Feeds"
-                            : "Account, Backup & Administration • Settings"}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span
-                      suppressHydrationWarning
-                      className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 tabular-nums"
-                      title="Total Account Value = Cash (€) + In Trades (€)"
-                    >
-                      €{Math.round(currentTotalEquity).toLocaleString("en-US")}
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold tabular-nums ${isPositiveNet
-                        ? "bg-emerald-50 text-emerald-600"
-                        : "bg-rose-50 text-rose-500"
-                        }`}
-                    >
-                      {isPositiveNet ? (
-                        <TrendingUp className="w-3.5 h-3.5" />
-                      ) : (
-                        <TrendingDown className="w-3.5 h-3.5" />
-                      )}
-                      <span>
-                        {isPositiveNet ? "+" : "-"}€
-                        {
-                          Math.abs(globalKpis.totalGainLossEur).toLocaleString(
-                            "en-US",
-                            {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            }
-                          )
-                        }{" "}
-                        Total P&amp;L
-                      </span>
-                    </span>
-                  </div>
-
-                  {/* Breakdown: Cash vs In Trades */}
-                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5 text-xs text-slate-500 font-medium tabular-nums">
-                    <button
-                      type="button"
-                      onClick={() => setIsAccountModalOpen(true)}
-                      className="hover:text-emerald-700 transition-colors cursor-pointer inline-flex items-center gap-1 group"
-                      title="Click to edit Cash balance"
-                    >
-                      <span className="text-slate-500">Cash:</span>{" "}
-                      <strong className="text-slate-800 font-semibold group-hover:text-emerald-700">
-                        €{Math.round(cashAvailable).toLocaleString("en-US")}
-                      </strong>{" "}
-                      <span className="text-slate-400">({cashPercent.toFixed(1)}%)</span>
-                      <Pencil className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-600" />
-                    </button>
-                    <span className="text-slate-300">•</span>
-                    <span title="Capital currently invested in open positions">
-                      In Trades:{" "}
-                      <strong className="text-slate-800 font-semibold">
-                        €{Math.round(globalKpis.openExposureEur).toLocaleString("en-US")}
-                      </strong>{" "}
-                      <span className="text-slate-400">({investedPercent.toFixed(1)}%)</span>
-                    </span>
-                  </div>
+          <header className="bg-white border-b border-slate-200/80 lg:sticky lg:top-0 lg:z-30">
+            {notificationMsg && (
+              <div className="bg-blue-600 text-white text-xs py-1.5 px-4 font-medium flex items-center justify-between animate-in fade-in slide-in-from-top-1">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>{notificationMsg}</span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setNotificationMsg(null)}
+                  className="text-blue-100 hover:text-white cursor-pointer ml-3"
+                >
+                  ✕
+                </button>
               </div>
+            )}
+            <div className="px-3.5 sm:px-8 pt-3 sm:pt-5 pb-0">
 
-              {/* Right: Action Buttons */}
-              <div className="flex flex-col lg:items-end gap-2.5 shrink-0">
-                {/* Action Buttons */}
-                <div className="grid grid-cols-3 sm:flex sm:flex-nowrap items-center gap-1.5 sm:gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenPositionSizer()}
-                    className="inline-flex items-center justify-center gap-1.5 px-2 sm:px-3.5 py-2 sm:py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
-                    title="Risk-First Position Sizing Calculator"
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span className="sm:hidden">Sizer</span>
-                    <span className="hidden sm:inline">Position Sizer</span>
-                  </button>
+              <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 sm:gap-4">
+                {/* Left: Hero Value */}
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                      {activeSection === "TRADES"
+                        ? "Trading Portfolio • Total Account Value"
+                        : activeSection === "EQUITY"
+                          ? "Performance Analytics • Total Account Value"
+                          : activeSection === "SECURITIES"
+                            ? "Master Entity Repository • Securities & Quote Feeds"
+                            : activeSection === "FOREX"
+                              ? "Currency Conversion • Live & Historical ECB Feeds"
+                              : "Account, Backup & Administration • Settings"}
+                    </div>
 
-                  <button
-                    type="button"
-                    disabled={isSyncingAll}
-                    onClick={() => handleBatchSync("OPEN_ONLY")}
-                    className="inline-flex items-center justify-center gap-1.5 px-2 sm:px-3.5 py-2 sm:py-2.5 rounded-lg text-[11px] sm:text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
-                    title="Sync live quotes & FX rates for open positions from Yahoo Finance"
-                  >
-                    <RefreshCw
-                      className={`w-3.5 h-3.5 text-blue-600 shrink-0 ${isSyncingAll ? "animate-spin" : ""
-                        }`}
-                    />
-                    <span className="sm:hidden">{isSyncingAll ? "Sync..." : "Sync"}</span>
-                    <span className="hidden sm:inline">{isSyncingAll ? "Syncing..." : "Sync Quotes"}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleOpenCreate}
-                    className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-4 py-2 sm:py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors cursor-pointer whitespace-nowrap"
-                  >
-                    <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5] shrink-0" />
-                    <span>Add Trade</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Sub-header Filter Tabs (Active when in Trade Ledger view) */}
-            {activeSection === "TRADES" ? (
-              <nav className="flex items-center gap-4 sm:gap-6 mt-3.5 sm:mt-5 -mb-px overflow-x-auto no-scrollbar">
-                {(
-                  [
-                    { id: "OPEN", label: "Open Positions", count: openCount },
-                    { id: "ALL", label: "All", count: trades.length },
-                    { id: "CLOSED", label: "Closed Trades", count: closedCount },
-                    { id: "TRIMMED", label: "2R Trimmed", count: trimmedCount },
-                  ] as const
-                ).map((tab) => {
-                  const active = tradeFilter === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setTradeFilter(tab.id)}
-                      className={`pb-3 text-xs font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${active
-                        ? "border-blue-600 text-blue-600 font-semibold"
-                        : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
-                        }`}
-                    >
-                      <span>{tab.label}</span>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span
-                        className={`text-[11px] px-1.5 py-0.2 rounded-full tabular-nums ${active
-                          ? "bg-blue-50 text-blue-600 font-semibold"
-                          : "bg-slate-100 text-slate-500"
+                        suppressHydrationWarning
+                        className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 tabular-nums"
+                        title="Total Account Value = Cash (€) + In Trades (€)"
+                      >
+                        €{Math.round(currentTotalEquity).toLocaleString("en-US")}
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-semibold tabular-nums ${isPositiveNet
+                          ? "bg-emerald-50 text-emerald-600"
+                          : "bg-rose-50 text-rose-500"
                           }`}
                       >
-                        {tab.count}
+                        {isPositiveNet ? (
+                          <TrendingUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <TrendingDown className="w-3.5 h-3.5" />
+                        )}
+                        <span>
+                          {isPositiveNet ? "+" : "-"}€
+                          {
+                            Math.abs(globalKpis.totalGainLossEur).toLocaleString(
+                              "en-US",
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              }
+                            )
+                          }{" "}
+                          Total P&amp;L
+                        </span>
                       </span>
+                    </div>
+
+                    {/* Breakdown: Cash vs In Trades */}
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5 text-xs text-slate-500 font-medium tabular-nums">
+                      <button
+                        type="button"
+                        onClick={() => setIsAccountModalOpen(true)}
+                        className="hover:text-emerald-700 transition-colors cursor-pointer inline-flex items-center gap-1 group"
+                        title="Click to edit Cash balance"
+                      >
+                        <span className="text-slate-500">Cash:</span>{" "}
+                        <strong className="text-slate-800 font-semibold group-hover:text-emerald-700">
+                          €{Math.round(cashAvailable).toLocaleString("en-US")}
+                        </strong>{" "}
+                        <span className="text-slate-400">({cashPercent.toFixed(1)}%)</span>
+                        <Pencil className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-600" />
+                      </button>
+                      <span className="text-slate-300">•</span>
+                      <span title="Capital currently invested in open positions">
+                        In Trades:{" "}
+                        <strong className="text-slate-800 font-semibold">
+                          €{Math.round(globalKpis.openExposureEur).toLocaleString("en-US")}
+                        </strong>{" "}
+                        <span className="text-slate-400">({investedPercent.toFixed(1)}%)</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Action Buttons */}
+                <div className="flex flex-col lg:items-end gap-2.5 shrink-0">
+                  {/* Action Buttons */}
+                  <div className="grid grid-cols-3 sm:flex sm:flex-nowrap items-center gap-1.5 sm:gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPositionSizer()}
+                      className="inline-flex items-center justify-center gap-1.5 px-2 sm:px-3.5 py-2 sm:py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
+                      title="Risk-First Position Sizing Calculator"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span className="sm:hidden">Sizer</span>
+                      <span className="hidden sm:inline">Position Sizer</span>
                     </button>
-                  );
-                })}
-              </nav>
-            ) : (
-              <div className="h-3" />
+
+                    <button
+                      type="button"
+                      disabled={isSyncingAll}
+                      onClick={() => handleBatchSync("OPEN_ONLY")}
+                      className="inline-flex items-center justify-center gap-1.5 px-2 sm:px-3.5 py-2 sm:py-2.5 rounded-lg text-[11px] sm:text-xs font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                      title="Sync live quotes & FX rates for open positions from Yahoo Finance"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 text-blue-600 shrink-0 ${isSyncingAll ? "animate-spin" : ""
+                          }`}
+                      />
+                      <span className="sm:hidden">{isSyncingAll ? "Sync..." : "Sync"}</span>
+                      <span className="hidden sm:inline">{isSyncingAll ? "Syncing..." : "Sync Quotes"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenCreate}
+                      className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-4 py-2 sm:py-2.5 rounded-lg text-[11px] sm:text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors cursor-pointer whitespace-nowrap"
+                    >
+                      <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5] shrink-0" />
+                      <span>Add Trade</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-header Filter Tabs (Active when in Trade Ledger view) */}
+              {activeSection === "TRADES" ? (
+                <nav className="flex items-center gap-4 sm:gap-6 mt-3.5 sm:mt-5 -mb-px overflow-x-auto no-scrollbar">
+                  {(
+                    [
+                      { id: "OPEN", label: "Open Positions", count: openCount },
+                      { id: "ALL", label: "All", count: trades.length },
+                      { id: "CLOSED", label: "Closed Trades", count: closedCount },
+                      { id: "TRIMMED", label: "2R Trimmed", count: trimmedCount },
+                    ] as const
+                  ).map((tab) => {
+                    const active = tradeFilter === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setTradeFilter(tab.id)}
+                        className={`pb-3 text-xs font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${active
+                          ? "border-blue-600 text-blue-600 font-semibold"
+                          : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
+                          }`}
+                      >
+                        <span>{tab.label}</span>
+                        <span
+                          className={`text-[11px] px-1.5 py-0.2 rounded-full tabular-nums ${active
+                            ? "bg-blue-50 text-blue-600 font-semibold"
+                            : "bg-slate-100 text-slate-500"
+                            }`}
+                        >
+                          {tab.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </nav>
+              ) : (
+                <div className="h-3" />
+              )}
+            </div>
+          </header>
+
+          {/* Main Viewport */}
+          <main className="p-3 sm:p-8 space-y-4 sm:space-y-6 flex-1 min-w-0">
+            {activeSection === "TRADES" && (
+              <KpiCards
+                kpis={globalKpis}
+                onOpenEquityCurve={() => setActiveSection("EQUITY")}
+                accountEquity={currentTotalEquity}
+              />
             )}
-          </div>
-        </header>
 
-        {/* Main Viewport */}
-        <main className="p-3 sm:p-8 space-y-4 sm:space-y-6 flex-1 min-w-0">
-          {activeSection === "TRADES" && (
-            <KpiCards
-              kpis={globalKpis}
-              onOpenEquityCurve={() => setActiveSection("EQUITY")}
-              accountEquity={currentTotalEquity}
-            />
-          )}
+            {activeSection === "EQUITY" ? (
+              <EquityCurveView
+                trades={trades}
+                currentAccountEquity={currentTotalEquity}
+                onOpenAccountModal={() => setIsAccountModalOpen(true)}
+              />
+            ) : activeSection === "SECURITIES" ? (
+              <SecuritiesView
+                securities={securities}
+                onCreateSecurity={handleCreateSecurity}
+                onUpdateSecurity={handleUpdateSecurity}
+                onDeleteSecurity={handleDeleteSecurity}
+                onSyncAllSecurities={(scope) => handleBatchSync(scope)}
+                onNewTradeForSecurity={handleNewTradeForSecurity}
+                isSyncingAll={isSyncingAll}
+              />
+            ) : activeSection === "FOREX" ? (
+              <ForexView
+                forexPairs={forexPairs}
+                onCreateForex={handleCreateForex}
+                onUpdateForex={handleUpdateForex}
+                onDeleteForex={handleDeleteForex}
+                onSyncAllForex={() => handleBatchSync("FOREX_ONLY")}
+                isSyncingAll={isSyncingAll}
+              />
+            ) : activeSection === "SETTINGS" ? (
+              <SettingsView
+                currentUser={currentUser}
+                tradeCount={trades.length}
+                securityCount={securities.length}
+                onExportXml={handleExportXml}
+                onImportXmlFile={handleImportXmlFile}
+                onLoadSampleCsv={handleLoadSampleCsv}
+                onClearPortfolio={handleClearPortfolio}
+                onSignOut={handleSignOut}
+              />
+            ) : (
+              <TradeTable
+                trades={filteredTrades}
+                securities={securities}
+                onToggleField={handleToggleField}
+                onEditTrade={handleOpenEdit}
+                onSyncSecurityQuote={async (secId) => {
+                  await handleUpdateSecurity(secId, { syncQuote: true });
+                }}
+                onSyncAllOpenQuotes={() => handleBatchSync("OPEN_ONLY")}
+                isSyncingAll={isSyncingAll}
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+              />
+            )}
 
-          {activeSection === "EQUITY" ? (
-            <EquityCurveView
-              trades={trades}
-              currentAccountEquity={currentTotalEquity}
-              onOpenAccountModal={() => setIsAccountModalOpen(true)}
-            />
-          ) : activeSection === "SECURITIES" ? (
-            <SecuritiesView
-              securities={securities}
-              onCreateSecurity={handleCreateSecurity}
-              onUpdateSecurity={handleUpdateSecurity}
-              onDeleteSecurity={handleDeleteSecurity}
-              onSyncAllSecurities={(scope) => handleBatchSync(scope)}
-              onNewTradeForSecurity={handleNewTradeForSecurity}
-              isSyncingAll={isSyncingAll}
-            />
-          ) : activeSection === "FOREX" ? (
-            <ForexView
-              forexPairs={forexPairs}
-              onCreateForex={handleCreateForex}
-              onUpdateForex={handleUpdateForex}
-              onDeleteForex={handleDeleteForex}
-              onSyncAllForex={() => handleBatchSync("FOREX_ONLY")}
-              isSyncingAll={isSyncingAll}
-            />
-          ) : activeSection === "SETTINGS" ? (
-            <SettingsView
-              currentUser={currentUser}
-              tradeCount={trades.length}
-              securityCount={securities.length}
-              onExportXml={handleExportXml}
-              onImportXmlFile={handleImportXmlFile}
-              onLoadSampleCsv={handleLoadSampleCsv}
-              onClearPortfolio={handleClearPortfolio}
-              onSignOut={handleSignOut}
-            />
-          ) : (
-            <TradeTable
-              trades={filteredTrades}
-              securities={securities}
-              onToggleField={handleToggleField}
-              onEditTrade={handleOpenEdit}
-              onSyncSecurityQuote={async (secId) => {
-                await handleUpdateSecurity(secId, { syncQuote: true });
-              }}
-              onSyncAllOpenQuotes={() => handleBatchSync("OPEN_ONLY")}
-              isSyncingAll={isSyncingAll}
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-            />
-          )}
-
-          {/* Page Footer */}
-          <footer className="pt-6 pb-2 border-t border-slate-200/70 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-slate-500">Trade Tracker</span>
-              <span>•</span>
-              <span>Performance &amp; Risk Ledger</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span>Version:</span>
-              <button
-                type="button"
-                onClick={() => setIsAboutModalOpen(true)}
-                className="font-mono font-medium px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200/80 transition-colors cursor-pointer"
-                title="Click for full version details"
-              >
-                {APP_BUILD_LABEL}
-              </button>
-            </div>
-          </footer>
-        </main>
+            {/* Page Footer */}
+            <footer className="pt-6 pb-2 border-t border-slate-200/70 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-500">Trade Tracker</span>
+                <span>•</span>
+                <span>Performance &amp; Risk Ledger</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span>Version:</span>
+                <button
+                  type="button"
+                  onClick={() => setIsAboutModalOpen(true)}
+                  className="font-mono font-medium px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200/80 transition-colors cursor-pointer"
+                  title="Click for full version details"
+                >
+                  {APP_BUILD_LABEL}
+                </button>
+              </div>
+            </footer>
+          </main>
       </div>
 
       <TradeModal
