@@ -968,7 +968,7 @@ export function DashboardClient({
                 {(
                   [
                     { id: "OPEN", label: "Open Positions", count: openCount },
-                    { id: "ALL", label: "Summary (All)", count: trades.length },
+                    { id: "ALL", label: "All", count: trades.length },
                     { id: "CLOSED", label: "Closed Trades", count: closedCount },
                     { id: "TRIMMED", label: "2R Trimmed", count: trimmedCount },
                   ] as const

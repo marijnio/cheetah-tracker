@@ -86,7 +86,7 @@ Designed with a clean, light-mode interface inspired by *Portfolio Performance* 
 ## Navigation & Workflows
 
 * **Cash Balance & Total Account Value:** Click **Edit Cash** (or the **Cash** button) in the header to enter your current uninvested cash balance from your broker. Cheetah Tracker automatically combines your exact cash balance with your live open positions (money in trades) to determine your Total Account Value, portfolio cash percentage, and risk-first position sizing limits.
-* **Trade Ledger:** Filter trades by **Summary (All)**, **Open Positions**, **Closed Trades**, or **2R Trimmed**. Use the search bar to filter by holding name or sector, and click column headers to sort.
+* **Trade Ledger:** Filter trades by **All**, **Open Positions**, **Closed Trades**, or **2R Trimmed**. Use the search bar to filter by holding name or sector, and click column headers to sort.
 * **Securities Master:** Add and edit stocks, ETF feeds, and manual price overrides. Click the sync icon on any row to fetch the latest market quotes.
 * **Forex & Currencies:** Inspect exchange rates, configure live quote symbols, or use the built-in **Historical ECB Exchange Rate Lookup** tool.
 * **Logging a Trade:** Click **Add Trade** and select any registered security from the master repository to automatically populate prices, currency, and risk limits.
