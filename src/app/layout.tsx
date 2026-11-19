@@ -11,7 +11,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Trading Performance Tracker",
+  title: "Cheetah Tracker",
   description:
     "Self-hosted Trading Performance & Risk Management Tracker",
   icons: {
