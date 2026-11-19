@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  getTradeById,
   updateTrade,
   deleteTrade,
   getAllTrades,
@@ -7,6 +8,8 @@ import {
   getAllForexPairs,
   getLiveQuoteMap,
   getLiveFxMap,
+  getUserById,
+  updateUserPreferences,
 } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
@@ -40,13 +43,47 @@ export async function PATCH(
     }
 
     const body = (await request.json()) as Partial<NewTradeInput>;
+    const existing = getTradeById(tradeId, auth.user.id);
+    if (!existing) {
+      return NextResponse.json({ error: "Trade not found" }, { status: 404 });
+    }
+
     const updated = updateTrade(tradeId, body, auth.user.id);
 
     if (!updated) {
       return NextResponse.json({ error: "Trade not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ updated, ...buildFullPayload(auth.user.id) });
+    let updatedUser = undefined;
+    const wasOpen = !existing.endDate;
+    const isNowClosed = Boolean(updated.endDate?.trim());
+    if (body.addToCash === true && wasOpen && isNowClosed) {
+      const exitPrice = updated.sellPrice;
+      const exitFx =
+        updated.currency.toUpperCase() === "EUR" ? 1.0 : updated.fxRateToEur;
+      if (exitPrice !== null && exitPrice !== undefined) {
+        const exitProceedsEur =
+          Number(updated.shares) * Number(exitPrice) * Number(exitFx);
+        if (Number.isFinite(exitProceedsEur) && exitProceedsEur > 0) {
+          const currentUser = getUserById(auth.user.id);
+          if (currentUser) {
+            const nextCashBalance = Number(
+              (currentUser.cashBalance + exitProceedsEur).toFixed(2)
+            );
+            updatedUser =
+              updateUserPreferences(auth.user.id, {
+                cashBalance: nextCashBalance,
+              }) ?? undefined;
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({
+      updated,
+      ...buildFullPayload(auth.user.id),
+      ...(updatedUser ? { user: updatedUser } : {}),
+    });
   } catch (error) {
     console.error("PATCH /api/trades/[id] error:", error);
     return NextResponse.json(

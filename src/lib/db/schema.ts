@@ -151,6 +151,7 @@ export interface NewTradeInput {
   positionGroupId?: string | null;
   notes?: string | null;
   deductFromCash?: boolean;
+  addToCash?: boolean;
 }
 
 export const SCHEMA_DDL = `

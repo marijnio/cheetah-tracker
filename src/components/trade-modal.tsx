@@ -107,6 +107,7 @@ export function TradeModal({
   const [stopMoved, setStopMoved] = useState(false);
   const [trimmedAt2R, setTrimmedAt2R] = useState(false);
   const [deductFromCash, setDeductFromCash] = useState(true);
+  const [addToCash, setAddToCash] = useState(true);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [fetchingEntryFx, setFetchingEntryFx] = useState(false);
@@ -242,6 +243,7 @@ export function TradeModal({
     setEntryFxMeta(null);
     setExitFxMeta(null);
     setDeductFromCash(!initialTrade && mode === "create");
+    setAddToCash(Boolean(initialTrade && !initialTrade.endDate));
 
     if (initialTrade) {
       const initCcy = initialTrade.currency || "USD";
@@ -554,6 +556,14 @@ export function TradeModal({
   const previewGainPct =
     numBuy > 0 ? (numSellOrLatest - numBuy) / numBuy : 0;
   const previewR = previewRiskPct > 0 ? previewGainPct / previewRiskPct : 0;
+  const isClosingOpenTrade = Boolean(
+    initialTrade &&
+      !initialTrade.endDate &&
+      (mode === "trim" || Boolean(endDate.trim()))
+  );
+  const numSellPrice = sellPrice.trim() !== "" ? Number(sellPrice) : 0;
+  const previewExitEur =
+    numShares > 0 && numSellPrice > 0 ? numShares * numSellPrice * numFx : 0;
 
   const parsedTicker = mapToYahooTicker(ticker || "TICKER", currency);
 
@@ -591,6 +601,7 @@ export function TradeModal({
           stopMoved,
           trimmedAt2R: true,
           notes: notes.trim() || null,
+          addToCash: isClosingOpenTrade ? addToCash : undefined,
         });
         onClose();
         return;
@@ -616,6 +627,7 @@ export function TradeModal({
           trimmedAt2R,
           notes: notes.trim() || null,
           deductFromCash: !initialTrade && mode === "create" ? deductFromCash : undefined,
+          addToCash: isClosingOpenTrade ? addToCash : undefined,
         },
         initialTrade?.id
       );
@@ -917,14 +929,14 @@ export function TradeModal({
                   {mode === "trim"
                     ? `Trim Price (${currency}) *`
                     : endDate
-                      ? `Sell Price (${currency})`
+                      ? `Sell Price (${currency})${isClosingOpenTrade && addToCash ? " *" : ""}`
                       : `Latest Price (${currency})`}
                 </label>
                 {endDate || mode === "trim" ? (
                   <input
                     type="number"
                     step="any"
-                    required={mode === "trim"}
+                    required={mode === "trim" || (isClosingOpenTrade && addToCash)}
                     placeholder="Exit price"
                     value={sellPrice}
                     onChange={(e) => setSellPrice(e.target.value)}
@@ -1266,6 +1278,77 @@ export function TradeModal({
                 {deductFromCash && endDate && (
                   <div className="mt-1.5 text-[11px] text-slate-500">
                     End date is set (closed trade) — uncheck if logging a past trade that is already reflected in your cash balance.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Cash Balance Addition (Close / Trim Mode) */}
+            {isClosingOpenTrade && (
+              <div
+                className={`rounded-xl border p-3.5 transition-colors ${
+                  addToCash
+                    ? "bg-emerald-50/50 border-emerald-200/80"
+                    : "bg-slate-50/70 border-slate-200/80"
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={addToCash}
+                      onChange={(e) => setAddToCash(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                      <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>
+                        {mode === "trim"
+                          ? "Add trim proceeds to Cash Balance"
+                          : "Add exit proceeds to Cash Balance"}
+                      </span>
+                    </span>
+                  </label>
+
+                  {cashBalance !== undefined && (
+                    <div className="text-xs tabular-nums flex items-center gap-1.5">
+                      <span className="text-slate-500">
+                        €{Math.round(cashBalance).toLocaleString("en-US")}
+                      </span>
+                      {addToCash &&
+                        previewExitEur > 0 &&
+                        (mode !== "trim" ||
+                          !initialTrade ||
+                          numShares < initialTrade.shares) && (
+                          <>
+                            <span className="text-slate-400">→</span>
+                            <span className="font-bold text-emerald-700">
+                              €
+                              {Math.round(
+                                cashBalance + previewExitEur
+                              ).toLocaleString("en-US")}
+                            </span>
+                            <span className="text-[11px] font-medium text-slate-500">
+                              (+€
+                              {previewExitEur.toLocaleString("en-US", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                              )
+                            </span>
+                          </>
+                        )}
+                    </div>
+                  )}
+                </div>
+
+                {addToCash && numSellPrice <= 0 && (
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-700">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>
+                      Enter a {mode === "trim" ? "Trim" : "Sell"} Price to calculate and add{" "}
+                      {mode === "trim" ? "trim" : "exit"} proceeds to your cash balance.
+                    </span>
                   </div>
                 )}
               </div>

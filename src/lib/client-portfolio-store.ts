@@ -685,6 +685,7 @@ export interface TrimTradeInput {
   stopMoved?: boolean;
   trimmedAt2R?: boolean;
   notes?: string | null;
+  addToCash?: boolean;
 }
 
 /**

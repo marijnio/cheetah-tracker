@@ -118,6 +118,26 @@ export async function POST(request: Request) {
             }) ?? undefined;
         }
       }
+    } else if (body.addToCash === true && Boolean(created.endDate?.trim())) {
+      const exitPrice = created.sellPrice;
+      const exitFx =
+        created.currency.toUpperCase() === "EUR" ? 1.0 : created.fxRateToEur;
+      if (exitPrice !== null && exitPrice !== undefined) {
+        const exitProceedsEur =
+          Number(created.shares) * Number(exitPrice) * Number(exitFx);
+        if (Number.isFinite(exitProceedsEur) && exitProceedsEur > 0) {
+          const currentUser = getUserById(auth.user.id);
+          if (currentUser) {
+            const nextCashBalance = Number(
+              (currentUser.cashBalance + exitProceedsEur).toFixed(2)
+            );
+            updatedUser =
+              updateUserPreferences(auth.user.id, {
+                cashBalance: nextCashBalance,
+              }) ?? undefined;
+          }
+        }
+      }
     }
 
     return NextResponse.json(

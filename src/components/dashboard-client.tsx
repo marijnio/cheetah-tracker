@@ -367,6 +367,10 @@ export function DashboardClient({
       flashNotification(
         `Added ${data.ticker} — cash balance updated to €${Math.round(payload.user.cashBalance).toLocaleString("en-US")}.`
       );
+    } else if (tradeId !== undefined && payload.user) {
+      flashNotification(
+        `Closed ${data.ticker} — cash balance updated to €${Math.round(payload.user.cashBalance).toLocaleString("en-US")}.`
+      );
     }
   };
 
@@ -416,6 +420,7 @@ export function DashboardClient({
         fxRateToEur: data.fxRateToEur ?? existing.fxRateToEur,
         positionGroupId: groupId,
         notes: data.notes ?? `Trimmed ${data.trimmedShares} shares`,
+        addToCash: data.addToCash,
       }),
     });
     const postPayload = await postRes.json();
@@ -423,6 +428,11 @@ export function DashboardClient({
       throw new Error(postPayload.error || "Failed to create trimmed trade");
     }
     applyServerPayload(postPayload);
+    if (postPayload.user) {
+      flashNotification(
+        `Trimmed ${existing.ticker} — cash balance updated to €${Math.round(postPayload.user.cashBalance).toLocaleString("en-US")}.`
+      );
+    }
   };
 
   const handleToggleField = async (
