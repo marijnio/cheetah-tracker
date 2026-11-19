@@ -134,7 +134,8 @@ export function parseTradesCsv(csvContent: string): NewTradeInput[] {
     );
 
     // Parse End/Latest FX Rate to EUR, healing #N/A values automatically
-    let fxRateToEur = parseNumber(idxRateToEur !== -1 ? row[idxRateToEur] : null);
+    const parsedEndFx = parseNumber(idxRateToEur !== -1 ? row[idxRateToEur] : null);
+    let fxRateToEur = parsedEndFx;
     if (currency === "EUR") {
       fxRateToEur = 1.0;
     } else if (fxRateToEur === null || fxRateToEur <= 0) {
@@ -157,7 +158,9 @@ export function parseTradesCsv(csvContent: string): NewTradeInput[] {
       entryFxRateToEur = 1.0;
     } else if (entryFxRateToEur === null || entryFxRateToEur <= 0) {
       const startDateKey = `${currency}:${startDate}`;
-      if (entryLocal && entryEur && entryLocal > 0) {
+      if (endDate && startDate === endDate && parsedEndFx !== null && parsedEndFx > 0) {
+        entryFxRateToEur = parsedEndFx;
+      } else if (entryLocal && entryEur && entryLocal > 0) {
         entryFxRateToEur = Number((entryEur / entryLocal).toFixed(6));
       } else if (HISTORICAL_FX_FALLBACKS[startDateKey]) {
         entryFxRateToEur = HISTORICAL_FX_FALLBACKS[startDateKey];

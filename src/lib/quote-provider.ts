@@ -364,29 +364,114 @@ export async function fetchYahooBatchQuotes(
   return output;
 }
 
+export interface HistoricalFxPoint {
+  date: string; // YYYY-MM-DD ascending
+  rateToEur: number;
+}
+
+export function getTodayUtcDateStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 /**
- * Fetches official ECB exchange rate (1 unit of fromCurrency -> EUR) from the free Frankfurter API.
- * Supports 'latest' or a historical 'YYYY-MM-DD' date.
+ * Pure UTC date arithmetic subtracting `days` calendar days from a YYYY-MM-DD string.
  */
-export async function fetchFrankfurterFxToEur(
+export function subtractDaysUtc(dateStr: string, days: number): string {
+  const parts = dateStr.split("-").map(Number);
+  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
+    const d = new Date(Date.now() - days * 86400000);
+    return d.toISOString().slice(0, 10);
+  }
+  const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] - days));
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * Binary-searches a sorted ascending HistoricalFxPoint[] for the latest point on or before `targetDate`.
+ */
+export function resolveSeriesRateOnOrBefore(
+  series: HistoricalFxPoint[],
+  targetDate: string
+): { rateToEur: number; effectiveDate: string } | null {
+  if (!series || series.length === 0) return null;
+  let lo = 0;
+  let hi = series.length - 1;
+  let matchIndex = -1;
+
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (series[mid].date <= targetDate) {
+      matchIndex = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  if (matchIndex === -1) return null;
+  return {
+    rateToEur: series[matchIndex].rateToEur,
+    effectiveDate: series[matchIndex].date,
+  };
+}
+
+/**
+ * Fetches official ECB exchange rate (1 unit of fromCurrency -> EUR) plus actual ECB fixing date.
+ * Clamps future dates to 'latest' and standardizes 6-decimal EUR-base inversion.
+ */
+export async function fetchFrankfurterFxDetailToEur(
   fromCurrency: string,
   dateStr: "latest" | string = "latest"
-): Promise<number> {
+): Promise<{ rateToEur: number; rateDate: string }> {
   const ccy = fromCurrency.trim().toUpperCase();
-  if (ccy === "EUR") return 1.0;
+  const today = getTodayUtcDateStr();
+  if (ccy === "EUR") {
+    return {
+      rateToEur: 1.0,
+      rateDate: dateStr === "latest" || dateStr > today ? today : dateStr,
+    };
+  }
 
-  const endpoint = `https://api.frankfurter.dev/v1/${dateStr}?base=${encodeURIComponent(
+  const effectiveDate =
+    !dateStr || dateStr === "latest" || dateStr > today ? "latest" : dateStr;
+
+  // 1. Preferred: EUR-base lookup inverted to 6 decimals (matches batch & time-series precision)
+  try {
+    const endpoint = `https://api.frankfurter.dev/v1/${effectiveDate}?base=EUR&symbols=${encodeURIComponent(
+      ccy
+    )}`;
+    const res = await fetch(endpoint, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const eurToCcy = Number(data?.rates?.[ccy]);
+      if (!Number.isNaN(eurToCcy) && eurToCcy > 0) {
+        return {
+          rateToEur: Number((1 / eurToCcy).toFixed(6)),
+          rateDate: typeof data?.date === "string" ? data.date : effectiveDate === "latest" ? today : effectiveDate,
+        };
+      }
+    }
+  } catch {
+    // Fall through to direct base=ccy query
+  }
+
+  // 2. Fallback: direct base=${ccy}&symbols=EUR lookup
+  const fallbackEndpoint = `https://api.frankfurter.dev/v1/${effectiveDate}?base=${encodeURIComponent(
     ccy
   )}&symbols=EUR`;
 
-  const res = await fetch(endpoint, {
+  const res = await fetch(fallbackEndpoint, {
     headers: { Accept: "application/json" },
     cache: "no-store",
   });
 
   if (!res.ok) {
     throw new Error(
-      `Frankfurter API HTTP ${res.status} for ${ccy}->EUR (${dateStr})`
+      `Frankfurter API HTTP ${res.status} for ${ccy}->EUR (${effectiveDate})`
     );
   }
 
@@ -396,7 +481,22 @@ export async function fetchFrankfurterFxToEur(
     throw new Error(`Invalid EUR rate returned from Frankfurter for ${ccy}`);
   }
 
-  return rate;
+  return {
+    rateToEur: Number(rate.toFixed(6)),
+    rateDate: typeof data?.date === "string" ? data.date : effectiveDate === "latest" ? today : effectiveDate,
+  };
+}
+
+/**
+ * Fetches official ECB exchange rate (1 unit of fromCurrency -> EUR) from the free Frankfurter API.
+ * Supports 'latest' or a historical 'YYYY-MM-DD' date.
+ */
+export async function fetchFrankfurterFxToEur(
+  fromCurrency: string,
+  dateStr: "latest" | string = "latest"
+): Promise<number> {
+  const detail = await fetchFrankfurterFxDetailToEur(fromCurrency, dateStr);
+  return detail.rateToEur;
 }
 
 /**
@@ -405,9 +505,13 @@ export async function fetchFrankfurterFxToEur(
 export async function fetchAllFrankfurterRatesToEur(
   currencies: string[]
 ): Promise<Record<string, number>> {
-  const targets = currencies
-    .map((c) => c.trim().toUpperCase())
-    .filter((c) => c && c !== "EUR");
+  const targets = Array.from(
+    new Set(
+      currencies
+        .map((c) => c.trim().toUpperCase())
+        .filter((c) => c && c !== "EUR")
+    )
+  );
   const result: Record<string, number> = { EUR: 1.0 };
   if (targets.length === 0) return result;
 
@@ -434,4 +538,193 @@ export async function fetchAllFrankfurterRatesToEur(
     }
   }
   return result;
+}
+
+/**
+ * Fetches daily historical FX rates from Yahoo Finance chart API (fallback for non-ECB currencies).
+ */
+export async function fetchYahooHistoricalFxSeriesToEur(
+  yahooSymbol: string,
+  startDate: string
+): Promise<HistoricalFxPoint[]> {
+  const sym = cleanSymbol(yahooSymbol);
+  const period1 = new Date(`${startDate}T00:00:00Z`);
+  if (Number.isNaN(period1.getTime())) {
+    return [];
+  }
+
+  const chartData = (await yahooFinance.chart(
+    sym,
+    { period1, interval: "1d" },
+    { validateResult: false }
+  )) as
+    | {
+        quotes?: Array<{
+          date?: Date | string | number;
+          close?: number | null;
+        }>;
+      }
+    | undefined;
+
+  const quotes = chartData?.quotes;
+  if (!Array.isArray(quotes)) return [];
+
+  const byDate = new Map<string, number>();
+  for (const q of quotes) {
+    if (q?.close === null || q?.close === undefined) continue;
+    const closeNum = Number(q.close);
+    if (Number.isNaN(closeNum) || closeNum <= 0 || !q.date) continue;
+    const d = q.date instanceof Date ? q.date : new Date(q.date);
+    if (Number.isNaN(d.getTime())) continue;
+    const iso = d.toISOString().slice(0, 10);
+    byDate.set(iso, Number(closeNum.toFixed(6)));
+  }
+
+  return Array.from(byDate.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, rateToEur]) => ({ date, rateToEur }));
+}
+
+function parseFrankfurterRangeResponse(
+  data: { rates?: Record<string, Record<string, number>> } | undefined,
+  targets: string[]
+): Record<string, HistoricalFxPoint[]> {
+  const perCcy: Record<string, Map<string, number>> = {};
+  for (const ccy of targets) {
+    perCcy[ccy] = new Map<string, number>();
+  }
+
+  const ratesByDate = data?.rates || {};
+  for (const [dateStr, dayRates] of Object.entries(ratesByDate)) {
+    if (!dayRates || typeof dayRates !== "object") continue;
+    for (const ccy of targets) {
+      const eurToCcy = Number(dayRates[ccy]);
+      if (!Number.isNaN(eurToCcy) && eurToCcy > 0) {
+        perCcy[ccy].set(dateStr, Number((1 / eurToCcy).toFixed(6)));
+      }
+    }
+  }
+
+  const out: Record<string, HistoricalFxPoint[]> = {};
+  for (const ccy of targets) {
+    const entries = Array.from(perCcy[ccy].entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, rateToEur]) => ({ date, rateToEur }));
+    if (entries.length > 0) {
+      out[ccy] = entries;
+    }
+  }
+  return out;
+}
+
+/**
+ * Fetches historical daily FX rates to EUR from Frankfurter (with 10-day backward padding for
+ * weekends/holidays), retrying individually and falling back to Yahoo Finance for non-ECB currencies.
+ */
+export async function fetchFrankfurterTimeSeriesToEur(
+  currencies: string[],
+  minDate: string,
+  yahooSymbolByCurrency?: Record<string, string>
+): Promise<{
+  seriesByCurrency: Record<
+    string,
+    { points: HistoricalFxPoint[]; source: "FRANKFURTER" | "YAHOO" }
+  >;
+  warnings: string[];
+}> {
+  const targets = Array.from(
+    new Set(
+      currencies
+        .map((c) => c.trim().toUpperCase())
+        .filter((c) => c && c !== "EUR")
+    )
+  );
+  const seriesByCurrency: Record<
+    string,
+    { points: HistoricalFxPoint[]; source: "FRANKFURTER" | "YAHOO" }
+  > = {};
+  const warnings: string[] = [];
+
+  if (targets.length === 0) {
+    return { seriesByCurrency, warnings };
+  }
+
+  const today = getTodayUtcDateStr();
+  const clampedMin = minDate > today ? today : minDate;
+  const paddedStart = subtractDaysUtc(clampedMin, 10);
+
+  // 1. Try single multi-currency Frankfurter range request
+  let batchSucceeded = false;
+  try {
+    const res = await fetch(
+      `https://api.frankfurter.dev/v1/${paddedStart}..?base=EUR&symbols=${encodeURIComponent(
+        targets.join(",")
+      )}`,
+      {
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      }
+    );
+
+    if (res.ok) {
+      const data = await res.json();
+      const parsed = parseFrankfurterRangeResponse(data, targets);
+      for (const [ccy, points] of Object.entries(parsed)) {
+        seriesByCurrency[ccy] = { points, source: "FRANKFURTER" };
+      }
+      batchSucceeded = true;
+    }
+  } catch {
+    // Fall through to per-currency retry
+  }
+
+  // 2. If batch call failed (e.g. contains unsupported non-ECB currency), retry individually on Frankfurter
+  if (!batchSucceeded) {
+    for (const ccy of targets) {
+      try {
+        const res = await fetch(
+          `https://api.frankfurter.dev/v1/${paddedStart}..?base=EUR&symbols=${encodeURIComponent(
+            ccy
+          )}`,
+          {
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+          }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const parsed = parseFrankfurterRangeResponse(data, [ccy]);
+          if (parsed[ccy]?.length) {
+            seriesByCurrency[ccy] = { points: parsed[ccy], source: "FRANKFURTER" };
+          }
+        }
+      } catch {
+        // Proceed to Yahoo fallback below
+      }
+    }
+  }
+
+  // 3. Fallback to Yahoo Finance historical chart for any currency missing from Frankfurter
+  const missing = targets.filter((ccy) => !seriesByCurrency[ccy]);
+  for (const ccy of missing) {
+    const yahooSym = yahooSymbolByCurrency?.[ccy] || `${ccy}EUR=X`;
+    try {
+      const points = await fetchYahooHistoricalFxSeriesToEur(yahooSym, paddedStart);
+      if (points.length > 0) {
+        seriesByCurrency[ccy] = { points, source: "YAHOO" };
+      } else {
+        warnings.push(
+          `No historical FX rates available for ${ccy}/EUR from ECB or Yahoo (${yahooSym}).`
+        );
+      }
+    } catch (err) {
+      warnings.push(
+        `Failed to fetch historical FX for ${ccy}/EUR: ${
+          err instanceof Error ? err.message : "Unknown error"
+        }`
+      );
+    }
+  }
+
+  return { seriesByCurrency, warnings };
 }

@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   Calculator,
-  Sparkles,
   RefreshCw,
   ShieldCheck,
   AlertTriangle,
@@ -70,6 +69,7 @@ interface TradeModalProps {
     buyPrice?: number;
     initialStopLoss?: number;
   }) => void;
+  onSyncLiveFx?: () => Promise<void>;
 }
 
 export function TradeModal({
@@ -87,6 +87,7 @@ export function TradeModal({
   mode = "create",
   onNavigateToSecurities,
   onOpenPositionSizer,
+  onSyncLiveFx,
 }: TradeModalProps) {
   const [selectedSecurityId, setSelectedSecurityId] = useState<string>("");
   const [ticker, setTicker] = useState("");
@@ -110,31 +111,152 @@ export function TradeModal({
   const [submitting, setSubmitting] = useState(false);
   const [fetchingEntryFx, setFetchingEntryFx] = useState(false);
   const [fetchingFx, setFetchingFx] = useState(false);
-  const [lookingUpYahoo, setLookingUpYahoo] = useState(false);
+  const [syncingLiveFx, setSyncingLiveFx] = useState(false);
+  const [entryFxMeta, setEntryFxMeta] = useState<string | null>(null);
+  const [exitFxMeta, setExitFxMeta] = useState<string | null>(null);
+
+  const entryAbortRef = useRef<AbortController | null>(null);
+  const exitAbortRef = useRef<AbortController | null>(null);
+  const entryFxTouchedDateRef = useRef<string | null>(null);
+  const exitFxTouchedDateRef = useRef<string | null>(null);
+
+  const getForexPairForCurrency = (ccy: string): ForexPairRecord | undefined => {
+    const upper = ccy.toUpperCase();
+    return forexPairs.find((f) => f.fromCurrency.toUpperCase() === upper);
+  };
 
   const getFxRateForCurrency = (ccy: string): number => {
     const upper = ccy.toUpperCase();
     if (upper === "EUR") return 1.0;
-    const match = forexPairs.find((f) => f.fromCurrency === upper);
+    const match = getForexPairForCurrency(upper);
     return match ? match.latestRate : 0.89338;
   };
 
+  const isPairStaleOrPending = (ccy: string): boolean => {
+    const upper = ccy.toUpperCase();
+    if (upper === "EUR") return false;
+    const pair = getForexPairForCurrency(upper);
+    if (!pair) return true;
+    if (pair.liveProvider === "MANUAL" || pair.syncStatus === "MANUAL") return false;
+    if (pair.syncStatus === "PENDING" || !pair.lastUpdated) return true;
+    return getQuoteAgeInfo(pair.lastUpdated).isDaysOld;
+  };
+
+  const runEntryFxLookup = async (ccy: string, dateStr: string) => {
+    const upper = ccy.toUpperCase();
+    if (upper === "EUR") {
+      setEntryFxRateToEur("1.0");
+      setEntryFxMeta(null);
+      return;
+    }
+    entryAbortRef.current?.abort();
+    const controller = new AbortController();
+    entryAbortRef.current = controller;
+    setFetchingEntryFx(true);
+    try {
+      const res = await fetch("/api/quotes/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lookupHistoricalFx: {
+            fromCurrency: upper,
+            date: dateStr || "latest",
+            preferLiveForToday: true,
+          },
+        }),
+        signal: controller.signal,
+      });
+      const data = await res.json();
+      if (!controller.signal.aborted && res.ok && data.rateToEur) {
+        setEntryFxRateToEur(String(data.rateToEur));
+        setEntryFxMeta(
+          data.source === "YAHOO"
+            ? "Yahoo Live"
+            : data.rateDate
+              ? `ECB ${data.rateDate}`
+              : null
+        );
+      }
+    } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") return;
+    } finally {
+      if (!controller.signal.aborted) {
+        setFetchingEntryFx(false);
+      }
+    }
+  };
+
+  const runExitFxLookup = async (ccy: string, dateStr: string) => {
+    const upper = ccy.toUpperCase();
+    if (upper === "EUR") {
+      setFxRateToEur("1.0");
+      setExitFxMeta(null);
+      return;
+    }
+    exitAbortRef.current?.abort();
+    const controller = new AbortController();
+    exitAbortRef.current = controller;
+    setFetchingFx(true);
+    try {
+      const res = await fetch("/api/quotes/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lookupHistoricalFx: {
+            fromCurrency: upper,
+            date: dateStr || "latest",
+            preferLiveForToday: true,
+          },
+        }),
+        signal: controller.signal,
+      });
+      const data = await res.json();
+      if (!controller.signal.aborted && res.ok && data.rateToEur) {
+        setFxRateToEur(String(data.rateToEur));
+        setExitFxMeta(
+          data.source === "YAHOO"
+            ? "Yahoo Live"
+            : data.rateDate
+              ? `ECB ${data.rateDate}`
+              : null
+        );
+      }
+    } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") return;
+    } finally {
+      if (!controller.signal.aborted) {
+        setFetchingFx(false);
+      }
+    }
+  };
+
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      entryAbortRef.current?.abort();
+      exitAbortRef.current?.abort();
+      return;
+    }
+    const todayStr = new Date().toISOString().slice(0, 10);
+    entryFxTouchedDateRef.current = null;
+    exitFxTouchedDateRef.current = null;
+    setEntryFxMeta(null);
+    setExitFxMeta(null);
     setDeductFromCash(!initialTrade && mode === "create");
+
     if (initialTrade) {
+      const initCcy = initialTrade.currency || "USD";
+      const initEndDate =
+        (mode === "close" || mode === "trim") && !initialTrade.endDate
+          ? todayStr
+          : initialTrade.endDate || "";
       setSelectedSecurityId(
         initialTrade.securityId ? String(initialTrade.securityId) : "NEW"
       );
       setTicker(initialTrade.ticker);
       setGicsSector(initialTrade.gicsSector || "Information Technology");
-      setCurrency(initialTrade.currency || "USD");
+      setCurrency(initCcy);
       setStartDate(initialTrade.startDate);
-      setEndDate(
-        (mode === "close" || mode === "trim") && !initialTrade.endDate
-          ? new Date().toISOString().slice(0, 10)
-          : initialTrade.endDate || ""
-      );
+      setEndDate(initEndDate);
       setShares(
         mode === "trim"
           ? String(
@@ -170,9 +292,10 @@ export function TradeModal({
       setFxRateToEur(
         String(
           (mode === "close" || mode === "trim") && !initialTrade.endDate
-            ? initialTrade.rateToEur ??
-            getFxRateForCurrency(initialTrade.currency || "USD")
-            : initialTrade.fxRateToEur ?? 1.0
+            ? initialTrade.rateToEur ?? getFxRateForCurrency(initCcy)
+            : !initialTrade.endDate
+              ? initialTrade.rateToEur ?? getFxRateForCurrency(initCcy)
+              : initialTrade.fxRateToEur ?? 1.0
         )
       );
       setStopMoved(
@@ -182,10 +305,19 @@ export function TradeModal({
       );
       setTrimmedAt2R(mode === "trim" ? true : initialTrade.trimmedAt2R);
       setNotes(initialTrade.notes || "");
+
+      if (
+        (mode === "close" || mode === "trim") &&
+        initCcy.toUpperCase() !== "EUR" &&
+        ((initEndDate && initEndDate < todayStr) || isPairStaleOrPending(initCcy))
+      ) {
+        void runExitFxLookup(initCcy, initEndDate || "latest");
+      }
     } else if (initialSizing) {
       const sec = initialSizing.securityId
         ? securities.find((s) => s.id === initialSizing.securityId)
         : null;
+      const targetCcy = sec?.currency || "USD";
       if (sec) {
         const rateStr = String(
           initialSizing.fxRateToEur ?? getFxRateForCurrency(sec.currency)
@@ -197,7 +329,7 @@ export function TradeModal({
         setEntryFxRateToEur(rateStr);
         setFxRateToEur(rateStr);
       }
-      setStartDate(new Date().toISOString().slice(0, 10));
+      setStartDate(todayStr);
       setEndDate("");
       setShares(initialSizing.shares ? String(initialSizing.shares) : "");
       setBuyPrice(initialSizing.buyPrice ? String(initialSizing.buyPrice) : "");
@@ -211,13 +343,20 @@ export function TradeModal({
       setStopMoved(false);
       setTrimmedAt2R(false);
       setNotes("");
+
+      if (
+        targetCcy.toUpperCase() !== "EUR" &&
+        (!initialSizing.fxRateToEur || isPairStaleOrPending(targetCcy))
+      ) {
+        void runEntryFxLookup(targetCcy, todayStr);
+      }
     } else if (preselectedSecurity) {
       const rateStr = String(getFxRateForCurrency(preselectedSecurity.currency));
       setSelectedSecurityId(String(preselectedSecurity.id));
       setTicker(preselectedSecurity.ticker);
       setGicsSector(preselectedSecurity.gicsSector);
       setCurrency(preselectedSecurity.currency);
-      setStartDate(new Date().toISOString().slice(0, 10));
+      setStartDate(todayStr);
       setEndDate("");
       setShares("");
       const priceStr =
@@ -237,6 +376,10 @@ export function TradeModal({
       setStopMoved(false);
       setTrimmedAt2R(false);
       setNotes("");
+
+      if (preselectedSecurity.currency.toUpperCase() !== "EUR") {
+        void runEntryFxLookup(preselectedSecurity.currency, todayStr);
+      }
     } else {
       const firstSec = securities[0];
       if (firstSec) {
@@ -245,7 +388,7 @@ export function TradeModal({
         setTicker(firstSec.ticker);
         setGicsSector(firstSec.gicsSector);
         setCurrency(firstSec.currency);
-        setStartDate(new Date().toISOString().slice(0, 10));
+        setStartDate(todayStr);
         setEndDate("");
         setShares("");
         const priceStr = firstSec.latestPrice !== null ? String(firstSec.latestPrice) : "";
@@ -257,20 +400,25 @@ export function TradeModal({
         setManualLatestPrice(priceStr);
         setEntryFxRateToEur(rateStr);
         setFxRateToEur(rateStr);
+
+        if (firstSec.currency.toUpperCase() !== "EUR") {
+          void runEntryFxLookup(firstSec.currency, todayStr);
+        }
       } else {
+        const defaultUsdRate = String(getFxRateForCurrency("USD"));
         setSelectedSecurityId("");
         setTicker("");
         setGicsSector("Information Technology");
         setCurrency("USD");
-        setStartDate(new Date().toISOString().slice(0, 10));
+        setStartDate(todayStr);
         setEndDate("");
         setShares("");
         setBuyPrice("");
         setSellPrice("");
         setInitialStopLoss("");
         setManualLatestPrice("");
-        setEntryFxRateToEur("1.0");
-        setFxRateToEur("1.0");
+        setEntryFxRateToEur(defaultUsdRate);
+        setFxRateToEur(defaultUsdRate);
       }
       setStopMoved(false);
       setTrimmedAt2R(false);
@@ -286,6 +434,7 @@ export function TradeModal({
     if (!val) return;
     const sec = securities.find((s) => String(s.id) === val);
     if (sec) {
+      const prevCcy = currency;
       const rateStr = String(getFxRateForCurrency(sec.currency));
       setTicker(sec.ticker);
       setGicsSector(sec.gicsSector);
@@ -297,120 +446,65 @@ export function TradeModal({
         setInitialStopLoss((sec.latestPrice * 0.94).toFixed(2));
         setManualLatestPrice(String(sec.latestPrice));
       }
-    }
-  };
-
-  const handleTickerChange = (val: string) => {
-    setTicker(val);
-    const exactMatch = securities.find(
-      (s) => s.ticker.toUpperCase() === val.trim().toUpperCase()
-    );
-    if (exactMatch) {
-      const rateStr = String(getFxRateForCurrency(exactMatch.currency));
-      setSelectedSecurityId(String(exactMatch.id));
-      setGicsSector(exactMatch.gicsSector);
-      setCurrency(exactMatch.currency);
-      setEntryFxRateToEur(rateStr);
-      setFxRateToEur(rateStr);
-      return;
-    }
-
-    setSelectedSecurityId("NEW");
-    if (val.includes(":") || val.toUpperCase() === "VWS") {
-      const mapped = mapToYahooTicker(val);
-      if (mapped.inferredCurrency && mapped.inferredCurrency !== currency) {
-        const rateStr = String(getFxRateForCurrency(mapped.inferredCurrency));
-        setCurrency(mapped.inferredCurrency);
-        setEntryFxRateToEur(rateStr);
-        setFxRateToEur(rateStr);
+      if (
+        sec.currency.toUpperCase() !== "EUR" &&
+        (!initialTrade || sec.currency.toUpperCase() !== prevCcy.toUpperCase())
+      ) {
+        entryFxTouchedDateRef.current = null;
+        void runEntryFxLookup(sec.currency, startDate);
       }
     }
   };
 
-  const handleCurrencyChange = (nextCcy: string) => {
-    const rateStr = String(getFxRateForCurrency(nextCcy));
-    setCurrency(nextCcy);
-    setEntryFxRateToEur(rateStr);
-    setFxRateToEur(rateStr);
+  const handleStartDateChange = (nextDate: string) => {
+    setStartDate(nextDate);
+    if (entryFxTouchedDateRef.current !== nextDate) {
+      entryFxTouchedDateRef.current = null;
+    }
+    if (
+      nextDate &&
+      /^\d{4}-\d{2}-\d{2}$/.test(nextDate) &&
+      currency.toUpperCase() !== "EUR" &&
+      entryFxTouchedDateRef.current !== nextDate
+    ) {
+      void runEntryFxLookup(currency, nextDate);
+    }
   };
 
-  const handleLookupTickerOnYahoo = async () => {
-    if (!ticker.trim()) return;
-    setLookingUpYahoo(true);
-    try {
-      const res = await fetch("/api/quotes/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lookupSymbol: ticker.trim() }),
-      });
-      const data = await res.json();
-      if (res.ok && data.lookup) {
-        const info = data.lookup;
-        if (info.gicsSector && info.gicsSector !== "Uncategorized") {
-          setGicsSector(info.gicsSector);
-        }
-        if (info.currency) {
-          const rateStr = String(getFxRateForCurrency(info.currency));
-          setCurrency(info.currency);
-          setEntryFxRateToEur(rateStr);
-          setFxRateToEur(rateStr);
-        }
-        if (info.latestPrice) {
-          if (!buyPrice) {
-            setBuyPrice(String(info.latestPrice));
-            setInitialStopLoss((info.latestPrice * 0.94).toFixed(2));
-          }
-          setManualLatestPrice(String(info.latestPrice));
-        }
-      }
-    } finally {
-      setLookingUpYahoo(false);
+  const handleEndDateChange = (nextDate: string) => {
+    setEndDate(nextDate);
+    if (exitFxTouchedDateRef.current !== nextDate) {
+      exitFxTouchedDateRef.current = null;
+    }
+    if (
+      nextDate &&
+      /^\d{4}-\d{2}-\d{2}$/.test(nextDate) &&
+      currency.toUpperCase() !== "EUR" &&
+      exitFxTouchedDateRef.current !== nextDate
+    ) {
+      void runExitFxLookup(currency, nextDate);
     }
   };
 
   const handleFetchEntryHistoricalFx = async () => {
     if (currency === "EUR") return;
-    setFetchingEntryFx(true);
-    try {
-      const res = await fetch("/api/quotes/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lookupHistoricalFx: {
-            fromCurrency: currency,
-            date: startDate || "latest",
-          },
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.rateToEur) {
-        setEntryFxRateToEur(String(data.rateToEur));
-      }
-    } finally {
-      setFetchingEntryFx(false);
-    }
+    entryFxTouchedDateRef.current = null;
+    await runEntryFxLookup(currency, startDate || "latest");
   };
 
   const handleFetchHistoricalFx = async () => {
     if (currency === "EUR") return;
-    setFetchingFx(true);
+    exitFxTouchedDateRef.current = null;
+    await runExitFxLookup(currency, endDate || "latest");
+  };
+
+  const handleSyncLiveFxClick = async () => {
+    if (!onSyncLiveFx || currency === "EUR") return;
+    setSyncingLiveFx(true);
     try {
-      const res = await fetch("/api/quotes/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lookupHistoricalFx: {
-            fromCurrency: currency,
-            date: endDate || "latest",
-          },
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.rateToEur) {
-        setFxRateToEur(String(data.rateToEur));
-      }
+      await onSyncLiveFx();
     } finally {
-      setFetchingFx(false);
+      setSyncingLiveFx(false);
     }
   };
 
@@ -422,20 +516,38 @@ export function TradeModal({
   };
 
   // Live preview math
+  const isOpenTradeForm = !endDate && mode !== "close" && mode !== "trim";
+  const matchedPair = getForexPairForCurrency(currency);
+  const liveDisplayRate =
+    currency === "EUR"
+      ? 1.0
+      : matchedPair?.latestRate ??
+        initialTrade?.rateToEur ??
+        (Number(fxRateToEur) || 0.89338);
+
   const numShares = Number(shares) || 0;
   const numBuy = Number(buyPrice) || 0;
   const numStop = Number(initialStopLoss) || 0;
   const numSellOrLatest =
     Number(sellPrice) || Number(manualLatestPrice) || numBuy;
   const numEntryFx =
-    currency === "EUR" ? 1.0 : Number(entryFxRateToEur) || Number(fxRateToEur) || 1.0;
-  const numFx = currency === "EUR" ? 1.0 : Number(fxRateToEur) || 1.0;
+    currency === "EUR"
+      ? 1.0
+      : Number(entryFxRateToEur) || liveDisplayRate || 1.0;
+  const numFx =
+    currency === "EUR"
+      ? 1.0
+      : isOpenTradeForm
+        ? liveDisplayRate
+        : Number(fxRateToEur) || 1.0;
 
   const previewEntryLocal = numShares * numBuy;
   const previewEntryEur = previewEntryLocal * numEntryFx;
   const previewLatestLocal = numShares * numSellOrLatest;
   const previewLatestEur = previewLatestLocal * numFx;
   const previewGainEur = previewLatestEur - previewEntryEur;
+  const previewFxImpactEur =
+    currency === "EUR" ? 0 : previewLatestLocal * (numFx - numEntryFx);
   const previewRiskPct =
     numBuy > 0 && numStop > 0 ? (numBuy - numStop) / numBuy : 0;
   const previewMoveStopAt = numBuy * (1 + 2 * previewRiskPct);
@@ -460,7 +572,11 @@ export function TradeModal({
       ).toUpperCase();
 
       const resolvedExitFx =
-        currency === "EUR" ? 1.0 : Number(fxRateToEur) || 1.0;
+        currency === "EUR"
+          ? 1.0
+          : isOpenTradeForm
+            ? liveDisplayRate
+            : Number(fxRateToEur) || 1.0;
       const resolvedEntryFx =
         currency === "EUR"
           ? 1.0
@@ -777,7 +893,7 @@ export function TradeModal({
                   required
                   disabled={mode === "trim"}
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-500 focus:outline-none focus:border-blue-600"
                 />
               </div>
@@ -791,7 +907,7 @@ export function TradeModal({
                   type="date"
                   required={mode === "trim"}
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  onChange={(e) => handleEndDateChange(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums focus:outline-none focus:border-blue-600"
                 />
               </div>
@@ -859,7 +975,7 @@ export function TradeModal({
                       type="button"
                       disabled={fetchingEntryFx}
                       onClick={handleFetchEntryHistoricalFx}
-                      title={`Fetch official ECB exchange rate for Start Date (${startDate || "latest"})`}
+                      title={`Fetch official ECB/live exchange rate for Start Date (${startDate || "latest"})`}
                       className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
                     >
                       <RefreshCw
@@ -874,42 +990,93 @@ export function TradeModal({
                   step="any"
                   disabled={currency === "EUR"}
                   value={currency === "EUR" ? "1.0" : entryFxRateToEur}
-                  onChange={(e) => setEntryFxRateToEur(e.target.value)}
+                  onChange={(e) => {
+                    entryFxTouchedDateRef.current = startDate;
+                    setEntryFxMeta(null);
+                    setEntryFxRateToEur(e.target.value);
+                  }}
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-blue-600"
                 />
+                {entryFxMeta && currency !== "EUR" && (
+                  <div className="text-[11px] text-slate-400 mt-1">
+                    Auto-resolved via {entryFxMeta}
+                  </div>
+                )}
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-slate-600">
-                    {endDate ? "Exit FX Rate to €" : "Current FX Rate to €"}{" "}
+                    {isOpenTradeForm ? "Current FX Rate to €" : "Exit FX Rate to €"}{" "}
                     <span className="text-slate-400 font-normal">
-                      ({endDate ? endDate : "Live"})
+                      ({isOpenTradeForm ? "Live" : endDate || "Latest"})
                     </span>
                   </label>
-                  {currency !== "EUR" && (
-                    <button
-                      type="button"
-                      disabled={fetchingFx}
-                      onClick={handleFetchHistoricalFx}
-                      title={`Fetch official ECB exchange rate for ${endDate || "latest"}`}
-                      className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <RefreshCw
-                        className={`w-2.5 h-2.5 ${fetchingFx ? "animate-spin" : ""}`}
-                      />
-                      ECB ({endDate || "Latest"})
-                    </button>
-                  )}
+                  {currency !== "EUR" &&
+                    (isOpenTradeForm ? (
+                      onSyncLiveFx && (
+                        <button
+                          type="button"
+                          disabled={syncingLiveFx}
+                          onClick={handleSyncLiveFxClick}
+                          title="Sync live exchange rates in Forex Pairs"
+                          className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <RefreshCw
+                            className={`w-2.5 h-2.5 ${syncingLiveFx ? "animate-spin" : ""}`}
+                          />
+                          Sync Live
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={fetchingFx}
+                        onClick={handleFetchHistoricalFx}
+                        title={`Fetch official ECB exchange rate for ${endDate || "latest"}`}
+                        className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <RefreshCw
+                          className={`w-2.5 h-2.5 ${fetchingFx ? "animate-spin" : ""}`}
+                        />
+                        ECB ({endDate || "Latest"})
+                      </button>
+                    ))}
                 </div>
-                <input
-                  type="number"
-                  step="any"
-                  disabled={currency === "EUR"}
-                  value={currency === "EUR" ? "1.0" : fxRateToEur}
-                  onChange={(e) => setFxRateToEur(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-blue-600"
-                />
+                {isOpenTradeForm ? (
+                  <div className="space-y-1">
+                    <input
+                      type="number"
+                      step="any"
+                      disabled
+                      value={currency === "EUR" ? "1.0" : String(liveDisplayRate)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-600 tabular-nums focus:outline-none"
+                    />
+                    <div className="text-[11px] text-slate-400">
+                      Live from Forex Pairs — locks when End Date is set
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <input
+                      type="number"
+                      step="any"
+                      disabled={currency === "EUR"}
+                      value={currency === "EUR" ? "1.0" : fxRateToEur}
+                      onChange={(e) => {
+                        exitFxTouchedDateRef.current = endDate;
+                        setExitFxMeta(null);
+                        setFxRateToEur(e.target.value);
+                      }}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 tabular-nums disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-blue-600"
+                    />
+                    {exitFxMeta && currency !== "EUR" && (
+                      <div className="text-[11px] text-slate-400">
+                        Auto-resolved via {exitFxMeta}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1010,6 +1177,21 @@ export function TradeModal({
                   })}{" "}
                   ({(previewGainPct * 100).toFixed(1)}%)
                 </div>
+                {currency !== "EUR" && Math.abs(previewFxImpactEur) >= 0.01 && (
+                  <div
+                    className={`text-[10px] font-medium ${
+                      previewFxImpactEur >= 0
+                        ? "text-emerald-600"
+                        : "text-rose-500"
+                    }`}
+                  >
+                    FX: {previewFxImpactEur >= 0 ? "+" : "-"}€
+                    {Math.abs(previewFxImpactEur).toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 

@@ -477,7 +477,7 @@ export function seedDefaultForexPairsForUser(
       user_id, from_currency, to_currency, pair_label, live_provider,
       yahoo_symbol, historical_provider, latest_rate, previous_close,
       last_updated, sync_status, sync_error, created_at, updated_at
-    ) VALUES (?, ?, 'EUR', ?, 'YAHOO', ?, 'FRANKFURTER', ?, NULL, ?, 'OK', NULL, ?, ?)
+    ) VALUES (?, ?, 'EUR', ?, 'YAHOO', ?, 'FRANKFURTER', ?, NULL, NULL, 'PENDING', NULL, ?, ?)
   `);
 
   for (const fx of DEFAULT_FOREX_PAIRS) {
@@ -487,7 +487,6 @@ export function seedDefaultForexPairsForUser(
       `${fx.fromCurrency} / EUR`,
       fx.yahooSymbol,
       fx.latestRate,
-      now,
       now,
       now
     );
@@ -980,8 +979,8 @@ function ensureForexPairExists(
       user_id, from_currency, to_currency, pair_label, live_provider,
       yahoo_symbol, historical_provider, latest_rate, previous_close,
       last_updated, sync_status, sync_error, created_at, updated_at
-    ) VALUES (?, ?, 'EUR', ?, 'YAHOO', ?, 'FRANKFURTER', ?, NULL, ?, 'OK', NULL, ?, ?)`
-  ).run(userId, ccy, `${ccy} / EUR`, `${ccy}EUR=X`, defaultRate, now, now, now);
+    ) VALUES (?, ?, 'EUR', ?, 'YAHOO', ?, 'FRANKFURTER', ?, NULL, NULL, 'PENDING', NULL, ?, ?)`
+  ).run(userId, ccy, `${ccy} / EUR`, `${ccy}EUR=X`, defaultRate, now, now);
 }
 
 export function upsertForexPair(
@@ -1743,4 +1742,163 @@ export function getDefaultFxToEur(currency: string): number {
     GBP: 1.185,
   };
   return defaults[ccy] ?? 1.0;
+}
+
+// ============================================================================
+// HISTORICAL FX CACHE & BULK TRADE FX UPDATER
+// ============================================================================
+
+export function getCachedHistoricalFxMap(
+  requests: Array<{ fromCurrency: string; requestedDate: string }>
+): Record<string, { rateToEur: number; rateDate: string }> {
+  if (requests.length === 0) return {};
+  const db = getDb();
+  const uniqueKeys = Array.from(
+    new Set(
+      requests
+        .map((r) => `${r.fromCurrency.trim().toUpperCase()}:${r.requestedDate.trim()}`)
+        .filter((k) => !k.startsWith("EUR:") && k.includes(":"))
+    )
+  );
+  if (uniqueKeys.length === 0) return {};
+
+  const out: Record<string, { rateToEur: number; rateDate: string }> = {};
+  const stmt = db.prepare(
+    "SELECT cache_key, rate_to_eur, rate_date FROM fx_cache WHERE cache_key = ?"
+  );
+
+  for (const key of uniqueKeys) {
+    const row = stmt.get(key) as unknown as
+      | { cache_key: string; rate_to_eur: number; rate_date: string }
+      | undefined;
+    if (row && Number.isFinite(row.rate_to_eur) && row.rate_to_eur > 0) {
+      out[row.cache_key] = {
+        rateToEur: row.rate_to_eur,
+        rateDate: row.rate_date,
+      };
+    }
+  }
+  return out;
+}
+
+export function upsertCachedHistoricalFxBatch(
+  entries: Array<{
+    fromCurrency: string;
+    requestedDate: string;
+    rateToEur: number;
+    rateDate: string;
+  }>
+): void {
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const valid = entries.filter((e) => {
+    const ccy = e.fromCurrency.trim().toUpperCase();
+    const reqDate = e.requestedDate.trim();
+    return (
+      ccy &&
+      ccy !== "EUR" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(reqDate) &&
+      reqDate < todayUtc &&
+      Number.isFinite(e.rateToEur) &&
+      e.rateToEur > 0
+    );
+  });
+
+  if (valid.length === 0) return;
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  db.exec("BEGIN TRANSACTION;");
+  try {
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO fx_cache (
+        cache_key, from_currency, rate_to_eur, rate_date, last_updated
+      ) VALUES (?, ?, ?, ?, ?)
+    `);
+    for (const entry of valid) {
+      const ccy = entry.fromCurrency.trim().toUpperCase();
+      const key = `${ccy}:${entry.requestedDate.trim()}`;
+      stmt.run(key, ccy, entry.rateToEur, entry.rateDate || entry.requestedDate.trim(), now);
+    }
+    db.exec("COMMIT;");
+  } catch (err) {
+    db.exec("ROLLBACK;");
+    throw err;
+  }
+}
+
+export interface BulkTradeFxUpdateItem {
+  tradeId: number;
+  entryFxRateToEur?: number;
+  fxRateToEur?: number;
+}
+
+export function bulkUpdateTradeFxRates(
+  userId: number,
+  updates: BulkTradeFxUpdateItem[]
+): number {
+  if (updates.length === 0) return 0;
+  const db = getDb();
+  const now = new Date().toISOString();
+  let updatedCount = 0;
+
+  db.exec("BEGIN TRANSACTION;");
+  try {
+    const selectStmt = db.prepare(
+      "SELECT id, currency, entry_fx_rate_to_eur, fx_rate_to_eur FROM trades WHERE id = ? AND user_id = ?"
+    );
+    const updateEntryOnly = db.prepare(
+      "UPDATE trades SET entry_fx_rate_to_eur = ?, updated_at = ? WHERE id = ? AND user_id = ?"
+    );
+    const updateExitOnly = db.prepare(
+      "UPDATE trades SET fx_rate_to_eur = ?, updated_at = ? WHERE id = ? AND user_id = ?"
+    );
+    const updateBoth = db.prepare(
+      "UPDATE trades SET entry_fx_rate_to_eur = ?, fx_rate_to_eur = ?, updated_at = ? WHERE id = ? AND user_id = ?"
+    );
+
+    for (const item of updates) {
+      const existing = selectStmt.get(item.tradeId, userId) as unknown as
+        | {
+            id: number;
+            currency: string;
+            entry_fx_rate_to_eur: number | null;
+            fx_rate_to_eur: number;
+          }
+        | undefined;
+      if (!existing) continue;
+      if ((existing.currency || "USD").toUpperCase() === "EUR") continue;
+
+      const hasEntry =
+        item.entryFxRateToEur !== undefined &&
+        Number.isFinite(item.entryFxRateToEur) &&
+        item.entryFxRateToEur > 0;
+      const hasExit =
+        item.fxRateToEur !== undefined &&
+        Number.isFinite(item.fxRateToEur) &&
+        item.fxRateToEur > 0;
+
+      if (!hasEntry && !hasExit) continue;
+
+      if (hasEntry && hasExit) {
+        updateBoth.run(
+          item.entryFxRateToEur!,
+          item.fxRateToEur!,
+          now,
+          item.tradeId,
+          userId
+        );
+      } else if (hasEntry) {
+        updateEntryOnly.run(item.entryFxRateToEur!, now, item.tradeId, userId);
+      } else if (hasExit) {
+        updateExitOnly.run(item.fxRateToEur!, now, item.tradeId, userId);
+      }
+      updatedCount++;
+    }
+
+    db.exec("COMMIT;");
+    return updatedCount;
+  } catch (err) {
+    db.exec("ROLLBACK;");
+    throw err;
+  }
 }

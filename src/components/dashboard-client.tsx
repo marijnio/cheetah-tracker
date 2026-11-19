@@ -30,6 +30,7 @@ import { ForexView } from "./forex-view";
 import { SettingsView } from "./settings-view";
 import { AccountEquityModal } from "./account-equity-modal";
 import { AboutModal } from "./about-modal";
+import { BulkFxSyncModal } from "./bulk-fx-sync-modal";
 import { APP_VERSION, APP_BUILD_LABEL } from "@/lib/version";
 import {
   type ComputedTrade,
@@ -105,13 +106,29 @@ export function DashboardClient({
   const [riskPercent, setRiskPercent] = useState<number>(currentUser.riskPercent);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
-  const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
+  const [isBulkFxModalOpen, setIsBulkFxModalOpen] = useState(false);
+  const [notification, setNotification] = useState<{
+    text: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
 
-  const flashNotification = (msg: string) => {
-    setNotificationMsg(msg);
-    setTimeout(() => {
-      setNotificationMsg((curr) => (curr === msg ? null : curr));
-    }, 4500);
+  const flashNotification = (
+    text: string,
+    action?: { label: string; onClick: () => void }
+  ) => {
+    const next = {
+      text,
+      actionLabel: action?.label,
+      onAction: action?.onClick,
+    };
+    setNotification(next);
+    setTimeout(
+      () => {
+        setNotification((curr) => (curr === next ? null : curr));
+      },
+      action ? 9000 : 4500
+    );
   };
 
   const applyServerPayload = (data: {
@@ -211,7 +228,11 @@ export function DashboardClient({
     }
     applyServerPayload(data);
     flashNotification(
-      `Imported "${file.name}" (${data.importedCount ?? 0} trades).`
+      `Imported "${file.name}" (${data.importedCount ?? 0} trades).`,
+      {
+        label: "Update All FX Rates →",
+        onClick: () => setIsBulkFxModalOpen(true),
+      }
     );
   };
 
@@ -227,7 +248,13 @@ export function DashboardClient({
       return;
     }
     applyServerPayload(data);
-    flashNotification(`Loaded ${data.importedCount ?? 0} sample trades.`);
+    flashNotification(
+      `Loaded ${data.importedCount ?? 0} sample trades.`,
+      {
+        label: "Update All FX Rates →",
+        onClick: () => setIsBulkFxModalOpen(true),
+      }
+    );
   };
 
   const handleClearPortfolio = async (confirmUsername: string) => {
@@ -835,16 +862,29 @@ export function DashboardClient({
 
         {/* Top Header */}
           <header className="bg-white border-b border-slate-200/80 lg:sticky lg:top-0 lg:z-30">
-            {notificationMsg && (
-              <div className="bg-blue-600 text-white text-xs py-1.5 px-4 font-medium flex items-center justify-between animate-in fade-in slide-in-from-top-1">
-                <div className="flex items-center gap-2">
+            {notification && (
+              <div className="bg-blue-600 text-white text-xs py-1.5 px-4 font-medium flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1">
+                <div className="flex items-center gap-2 flex-wrap">
                   <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                  <span>{notificationMsg}</span>
+                  <span>{notification.text}</span>
+                  {notification.actionLabel && notification.onAction && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const fn = notification.onAction;
+                        setNotification(null);
+                        fn?.();
+                      }}
+                      className="ml-1 px-2.5 py-0.5 rounded-md bg-white/20 hover:bg-white/30 text-white font-semibold transition-colors cursor-pointer"
+                    >
+                      {notification.actionLabel}
+                    </button>
+                  )}
                 </div>
                 <button
                   type="button"
-                  onClick={() => setNotificationMsg(null)}
-                  className="text-blue-100 hover:text-white cursor-pointer ml-3"
+                  onClick={() => setNotification(null)}
+                  className="text-blue-100 hover:text-white cursor-pointer ml-3 shrink-0"
                 >
                   ✕
                 </button>
@@ -1045,6 +1085,7 @@ export function DashboardClient({
                 onUpdateForex={handleUpdateForex}
                 onDeleteForex={handleDeleteForex}
                 onSyncAllForex={() => handleBatchSync("FOREX_ONLY")}
+                onOpenBulkFxSync={() => setIsBulkFxModalOpen(true)}
                 isSyncingAll={isSyncingAll}
               />
             ) : activeSection === "SETTINGS" ? (
@@ -1062,12 +1103,14 @@ export function DashboardClient({
               <TradeTable
                 trades={filteredTrades}
                 securities={securities}
+                forexPairs={forexPairs}
                 onToggleField={handleToggleField}
                 onEditTrade={handleOpenEdit}
                 onSyncSecurityQuote={async (secId) => {
                   await handleUpdateSecurity(secId, { syncQuote: true });
                 }}
                 onSyncAllOpenQuotes={() => handleBatchSync("OPEN_ONLY")}
+                onOpenBulkFxSync={() => setIsBulkFxModalOpen(true)}
                 isSyncingAll={isSyncingAll}
                 searchQuery={searchQuery}
                 onSearchQueryChange={setSearchQuery}
@@ -1114,6 +1157,20 @@ export function DashboardClient({
         mode={modalMode}
         onNavigateToSecurities={() => setActiveSection("SECURITIES")}
         onOpenPositionSizer={handleOpenPositionSizer}
+        onSyncLiveFx={() => handleBatchSync("FOREX_ONLY")}
+      />
+
+      <BulkFxSyncModal
+        isOpen={isBulkFxModalOpen}
+        onClose={() => setIsBulkFxModalOpen(false)}
+        onApplied={(payload) => {
+          applyServerPayload(payload);
+          const tradesCount = payload.summary?.tradesAffected ?? 0;
+          const pairsCount = payload.summary?.livePairUpdatesCount ?? 0;
+          flashNotification(
+            `Updated FX rates across ${tradesCount} trade${tradesCount === 1 ? "" : "s"} and ${pairsCount} currency pair${pairsCount === 1 ? "" : "s"}.`
+          );
+        }}
       />
 
       <PositionSizerModal

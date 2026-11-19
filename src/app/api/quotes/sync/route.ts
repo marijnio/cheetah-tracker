@@ -7,14 +7,20 @@ import {
   getAllTrades,
   getLiveQuoteMap,
   getLiveFxMap,
+  getCachedHistoricalFxMap,
+  upsertCachedHistoricalFxBatch,
 } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { computeTradesWithMetrics, computePortfolioKPIs } from "@/lib/trade-math";
 import {
   fetchYahooQuote,
   fetchYahooBatchQuotes,
-  fetchFrankfurterFxToEur,
+  fetchFrankfurterFxDetailToEur,
   fetchAllFrankfurterRatesToEur,
+  fetchYahooHistoricalFxSeriesToEur,
+  getTodayUtcDateStr,
+  resolveSeriesRateOnOrBefore,
+  subtractDaysUtc,
 } from "@/lib/quote-provider";
 import { mapToYahooTicker } from "@/lib/ticker-mapper";
 
@@ -39,7 +45,11 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       scope?: "OPEN_ONLY" | "ALL_SECURITIES" | "FOREX_ONLY";
       lookupSymbol?: string;
-      lookupHistoricalFx?: { fromCurrency: string; date: string };
+      lookupHistoricalFx?: {
+        fromCurrency: string;
+        date: string;
+        preferLiveForToday?: boolean;
+      };
       statelessBatch?: {
         symbols?: string[];
         forexCurrencies?: string[];
@@ -65,14 +75,122 @@ export async function POST(request: Request) {
       });
     }
 
-    // 2. Historical FX lookup on a specific End Date (Frankfurter ECB)
+    // 2. Historical / Same-Day FX lookup (fx_cache + Frankfurter ECB + Yahoo live/fallback)
     if (body.lookupHistoricalFx) {
-      const { fromCurrency, date } = body.lookupHistoricalFx;
-      const rate = await fetchFrankfurterFxToEur(
-        fromCurrency,
-        date || "latest"
+      const { fromCurrency, date, preferLiveForToday } = body.lookupHistoricalFx;
+      const ccy = (fromCurrency || "USD").trim().toUpperCase();
+      const todayUtc = getTodayUtcDateStr();
+      const targetDate = (date || "latest").trim();
+
+      if (ccy === "EUR") {
+        return NextResponse.json({
+          rateToEur: 1.0,
+          rateDate: targetDate === "latest" || targetDate > todayUtc ? todayUtc : targetDate,
+          source: "EUR",
+        });
+      }
+
+      const userPairs = getAllForexPairs(auth.user.id);
+      const matchingPair = userPairs.find(
+        (p) => p.fromCurrency.trim().toUpperCase() === ccy
       );
-      return NextResponse.json({ rateToEur: rate });
+      const yahooSym = matchingPair?.yahooSymbol || `${ccy}EUR=X`;
+
+      // For today/latest/future dates with preferLiveForToday, try live Yahoo quote first
+      if (
+        (targetDate === "latest" || targetDate >= todayUtc) &&
+        preferLiveForToday
+      ) {
+        if (!matchingPair || matchingPair.liveProvider !== "FRANKFURTER") {
+          try {
+            const q = await fetchYahooQuote(yahooSym, false);
+            return NextResponse.json({
+              rateToEur: Number(q.regularMarketPrice.toFixed(6)),
+              rateDate: todayUtc,
+              source: "YAHOO",
+            });
+          } catch {
+            // Fall through to Frankfurter ECB latest
+          }
+        }
+        const detail = await fetchFrankfurterFxDetailToEur(ccy, "latest");
+        return NextResponse.json({
+          rateToEur: detail.rateToEur,
+          rateDate: detail.rateDate,
+          source: "FRANKFURTER",
+        });
+      }
+
+      // Past date (< todayUtc): check fx_cache first
+      if (/^\d{4}-\d{2}-\d{2}$/.test(targetDate) && targetDate < todayUtc) {
+        const cached = getCachedHistoricalFxMap([
+          { fromCurrency: ccy, requestedDate: targetDate },
+        ]);
+        const hit = cached[`${ccy}:${targetDate}`];
+        if (hit) {
+          return NextResponse.json({
+            rateToEur: hit.rateToEur,
+            rateDate: hit.rateDate,
+            source: "CACHE",
+          });
+        }
+      }
+
+      // Fetch from Frankfurter (or Yahoo chart fallback for non-ECB currencies)
+      try {
+        const detail = await fetchFrankfurterFxDetailToEur(
+          ccy,
+          targetDate || "latest"
+        );
+        if (/^\d{4}-\d{2}-\d{2}$/.test(targetDate) && targetDate < todayUtc) {
+          upsertCachedHistoricalFxBatch([
+            {
+              fromCurrency: ccy,
+              requestedDate: targetDate,
+              rateToEur: detail.rateToEur,
+              rateDate: detail.rateDate,
+            },
+          ]);
+        }
+        return NextResponse.json({
+          rateToEur: detail.rateToEur,
+          rateDate: detail.rateDate,
+          source: "FRANKFURTER",
+        });
+      } catch {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+          const paddedStart = subtractDaysUtc(
+            targetDate > todayUtc ? todayUtc : targetDate,
+            10
+          );
+          const series = await fetchYahooHistoricalFxSeriesToEur(
+            yahooSym,
+            paddedStart
+          );
+          const resolved = resolveSeriesRateOnOrBefore(
+            series,
+            targetDate > todayUtc ? todayUtc : targetDate
+          );
+          if (resolved) {
+            if (targetDate < todayUtc) {
+              upsertCachedHistoricalFxBatch([
+                {
+                  fromCurrency: ccy,
+                  requestedDate: targetDate,
+                  rateToEur: resolved.rateToEur,
+                  rateDate: resolved.effectiveDate,
+                },
+              ]);
+            }
+            return NextResponse.json({
+              rateToEur: resolved.rateToEur,
+              rateDate: resolved.effectiveDate,
+              source: "YAHOO",
+            });
+          }
+        }
+        throw new Error(`Could not resolve FX rate for ${ccy} on ${targetDate}`);
+      }
     }
 
     // 3. Stateless batch quote & FX sync for browser-local portfolio mode

@@ -8,6 +8,8 @@ import {
   Trash2,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
+  Clock,
   Globe,
   Calendar,
   X,
@@ -19,6 +21,7 @@ import type {
   FxProviderType,
 } from "@/lib/db/schema";
 import { resolveYahooFinanceUrl } from "@/lib/ticker-mapper";
+import { getQuoteAgeInfo } from "@/lib/quote-age";
 import { YahooFinanceIcon } from "./icons";
 
 interface ForexViewProps {
@@ -32,6 +35,7 @@ interface ForexViewProps {
   ) => Promise<void>;
   onDeleteForex: (pair: ForexPairRecord) => Promise<void>;
   onSyncAllForex: () => Promise<void>;
+  onOpenBulkFxSync: () => void;
   isSyncingAll: boolean;
 }
 
@@ -41,6 +45,7 @@ export function ForexView({
   onUpdateForex,
   onDeleteForex,
   onSyncAllForex,
+  onOpenBulkFxSync,
   isSyncingAll,
 }: ForexViewProps) {
   const [syncingId, setSyncingId] = useState<number | null>(null);
@@ -180,7 +185,17 @@ export function ForexView({
                 isSyncingAll ? "animate-spin" : ""
               }`}
             />
-            <span>Sync All FX Rates</span>
+            <span>Sync Live FX</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenBulkFxSync}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer"
+            title="Preview and update live, entry, and exit FX rates across all trades"
+          >
+            <ArrowRightLeft className="w-3.5 h-3.5 text-amber-600" />
+            <span>Update All Trade FX</span>
           </button>
 
           <button
@@ -286,24 +301,68 @@ export function ForexView({
                     </td>
 
                     <td className="py-3.5 px-3 text-center whitespace-nowrap">
-                      {pair.syncStatus === "OK" ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Active
-                        </span>
-                      ) : pair.syncStatus === "ERROR" ? (
-                        <span
-                          title={pair.syncError || "Sync error"}
-                          className="inline-flex items-center gap-1 text-[11px] text-rose-500 font-medium"
-                        >
-                          <AlertCircle className="w-3.5 h-3.5" />
-                          Error
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-slate-400">
-                          {pair.syncStatus}
-                        </span>
-                      )}
+                      {(() => {
+                        const age = getQuoteAgeInfo(pair.lastUpdated);
+                        if (pair.liveProvider === "MANUAL" || pair.syncStatus === "MANUAL") {
+                          return (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                              Manual
+                            </span>
+                          );
+                        }
+                        if (pair.syncStatus === "ERROR") {
+                          return (
+                            <span
+                              title={pair.syncError || "Sync error"}
+                              className="inline-flex items-center gap-1 text-[11px] text-rose-500 font-medium"
+                            >
+                              <AlertCircle className="w-3.5 h-3.5" />
+                              Error
+                            </span>
+                          );
+                        }
+                        if (pair.syncStatus === "PENDING" || !pair.lastUpdated) {
+                          return (
+                            <span
+                              title="Default/unverified rate — sync live FX to update"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold"
+                            >
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              Pending Sync
+                            </span>
+                          );
+                        }
+                        if (age.isDaysOld) {
+                          return (
+                            <div className="flex flex-col items-center">
+                              <span
+                                title={age.tooltip}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold"
+                              >
+                                <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                <span suppressHydrationWarning>Stale ({age.label})</span>
+                              </span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="flex flex-col items-center">
+                            <span
+                              title={age.tooltip}
+                              className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Active
+                            </span>
+                            <span
+                              suppressHydrationWarning
+                              className="text-[10px] text-slate-400"
+                            >
+                              {age.label}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     <td className="py-3.5 pl-3 pr-5 text-right whitespace-nowrap">

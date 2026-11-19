@@ -13,6 +13,8 @@ export interface ComputedTrade extends TradeRecord {
   gainLossPercent: number; // e.g., 0.187 for 18.7%
   gainLossLocal: number;
   gainLossEur: number;
+  fxImpactEur: number;
+  fxImpactPercent: number;
   entryRateToEur: number;
   rateToEur: number;
   rMultiple: number;
@@ -127,6 +129,17 @@ export function computeTradesWithMetrics(
     const gainLossEur = latestValueEur - entryValueEur;
     const gainLossPercent = trade.buyPrice > 0 ? (latestPrice - trade.buyPrice) / trade.buyPrice : 0;
 
+    // Trading 212-style FX impact: portion of EUR return attributable to FX rate movement
+    // Satisfies: (latestValueLocal - entryValueLocal) * entryRateToEur + fxImpactEur === gainLossEur
+    const fxImpactEur =
+      currency === "EUR"
+        ? 0
+        : latestValueLocal * (rateToEur - entryRateToEur);
+    const fxImpactPercent =
+      currency === "EUR" || entryRateToEur <= 0
+        ? 0
+        : (rateToEur - entryRateToEur) / entryRateToEur;
+
     // R-Multiple = Gain/Loss % / Initial Risk %
     const rMultiple =
       initialRiskPercent > 0 ? gainLossPercent / initialRiskPercent : 0;
@@ -155,6 +168,8 @@ export function computeTradesWithMetrics(
       gainLossPercent,
       gainLossLocal,
       gainLossEur,
+      fxImpactEur,
+      fxImpactPercent,
       entryRateToEur,
       rateToEur,
       rMultiple,

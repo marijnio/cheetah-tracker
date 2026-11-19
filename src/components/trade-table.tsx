@@ -19,7 +19,7 @@ import {
   Edit3,
 } from "lucide-react";
 import type { ComputedTrade } from "@/lib/trade-math";
-import type { SecurityRecord } from "@/lib/db/schema";
+import type { SecurityRecord, ForexPairRecord } from "@/lib/db/schema";
 import { getQuoteAgeInfo } from "@/lib/quote-age";
 import { resolveTradingViewUrl, resolveYahooFinanceUrl } from "@/lib/ticker-mapper";
 import { YahooFinanceIcon } from "./icons";
@@ -27,6 +27,7 @@ import { YahooFinanceIcon } from "./icons";
 interface TradeTableProps {
   trades: ComputedTrade[];
   securities?: SecurityRecord[];
+  forexPairs?: ForexPairRecord[];
   onToggleField: (
     trade: ComputedTrade,
     field: "stopMoved" | "trimmedAt2R"
@@ -35,6 +36,7 @@ interface TradeTableProps {
   onDeleteTrade?: (trade: ComputedTrade) => Promise<void>;
   onSyncSecurityQuote?: (securityId: number) => Promise<void>;
   onSyncAllOpenQuotes?: () => Promise<void>;
+  onOpenBulkFxSync?: () => void;
   isSyncingAll?: boolean;
   searchQuery: string;
   onSearchQueryChange: (next: string) => void;
@@ -54,6 +56,7 @@ type SortKey =
   | "tradingDaysHeld"
   | "gainLossPercent"
   | "gainLossEur"
+  | "fxImpactEur"
   | "rMultiple"
   | "moveStopAt"
   | "percentLeftBeforeMove";
@@ -74,6 +77,34 @@ function formatLocalPrice(val: number | null | undefined, ccy: string): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function formatSignedLocalPrice(val: number, ccy: string): string {
+  const sign = val < 0 ? "-" : val > 0 ? "+" : "";
+  return `${sign}${formatLocalPrice(Math.abs(val), ccy)}`;
+}
+
+function getTradeFxStatus(
+  trade: ComputedTrade,
+  forexPairMap: Map<string, ForexPairRecord>
+) {
+  const ccy = (trade.currency || "USD").toUpperCase();
+  const fxPair = ccy !== "EUR" ? forexPairMap.get(ccy) : undefined;
+  const fxAge = getQuoteAgeInfo(fxPair?.lastUpdated);
+  const isFxManual = fxPair?.liveProvider === "MANUAL" || fxPair?.syncStatus === "MANUAL";
+  const isFxError = trade.isOpen && Boolean(fxPair && fxPair.syncStatus === "ERROR");
+  const isFxPending =
+    trade.isOpen &&
+    !isFxManual &&
+    Boolean(fxPair && (fxPair.syncStatus === "PENDING" || !fxPair.lastUpdated));
+  const isFxStale =
+    trade.isOpen &&
+    !isFxManual &&
+    !isFxPending &&
+    !isFxError &&
+    Boolean(fxPair && fxAge.isDaysOld);
+  const needsFxSync = isFxPending || isFxStale || isFxError;
+  return { fxPair, fxAge, isFxError, isFxPending, isFxStale, needsFxSync };
 }
 
 function formatEurValue(val: number, showPlus = false): string {
@@ -104,16 +135,26 @@ function getRMultiplePillStyle(r: number): string {
 export function TradeTable({
   trades,
   securities,
+  forexPairs,
   onToggleField,
   onEditTrade,
   onSyncSecurityQuote,
   onSyncAllOpenQuotes,
+  onOpenBulkFxSync,
   isSyncingAll,
   searchQuery,
   onSearchQueryChange,
 }: TradeTableProps) {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const forexPairMap = useMemo(() => {
+    const map = new Map<string, ForexPairRecord>();
+    for (const pair of forexPairs ?? []) {
+      map.set(pair.fromCurrency.toUpperCase(), pair);
+    }
+    return map;
+  }, [forexPairs]);
 
   const [syncingSecurityId, setSyncingSecurityId] = useState<number | null>(
     null
@@ -290,6 +331,7 @@ export function TradeTable({
               <option value="">Sort: Default</option>
               <option value="startDate">Entry Date</option>
               <option value="gainLossEur">P&amp;L (€)</option>
+              <option value="fxImpactEur">FX Impact (€)</option>
               <option value="gainLossPercent">Return (%)</option>
               <option value="rMultiple">R-Multiple</option>
               <option value="latestValueEur">Value (€)</option>
@@ -363,6 +405,7 @@ export function TradeTable({
             const hasReached2R = trade.latestPrice >= trade.moveStopAt;
             const needsStopAction =
               isOpen && !trade.stopMoved && hasReached2R;
+            const fxStatus = getTradeFxStatus(trade, forexPairMap);
 
             return (
               <div
@@ -526,11 +569,64 @@ export function TradeTable({
                     <span className="shrink-0">{trade.tradingDaysHeld}d</span>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    {trade.currency !== "EUR" && (
+                      <span
+                        className={`text-[10px] font-medium ${
+                          trade.fxImpactEur > 0.005
+                            ? "text-emerald-600"
+                            : trade.fxImpactEur < -0.005
+                              ? "text-rose-500"
+                              : "text-slate-400"
+                        }`}
+                        title={`FX impact (${trade.entryRateToEur.toFixed(4)} → ${trade.rateToEur.toFixed(4)})`}
+                      >
+                        FX {formatEurValue(trade.fxImpactEur, true)}
+                        {Math.abs(trade.fxImpactPercent) >= 0.0005 &&
+                          ` (${trade.fxImpactPercent >= 0 ? "+" : ""}${(
+                            trade.fxImpactPercent * 100
+                          ).toFixed(1)}%)`}
+                      </span>
+                    )}
                     {isOpen && (
                       <span className="text-slate-600 font-medium">
                         {formatEurValue(trade.latestValueEur)}
                       </span>
+                    )}
+                    {fxStatus.needsFxSync && onOpenBulkFxSync && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenBulkFxSync();
+                        }}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-semibold cursor-pointer ${
+                          fxStatus.isFxError
+                            ? "bg-rose-50 text-rose-700 border-rose-200"
+                            : "bg-amber-50 text-amber-800 border-amber-200"
+                        }`}
+                        title={
+                          fxStatus.isFxError
+                            ? fxStatus.fxPair?.syncError ||
+                              "FX sync error — tap to update FX rates"
+                            : fxStatus.isFxPending
+                              ? "Pending FX sync — tap to update all FX rates"
+                              : `FX updated ${fxStatus.fxAge.label} — tap to update all FX rates`
+                        }
+                      >
+                        {fxStatus.isFxError ? (
+                          <AlertCircle className="w-2.5 h-2.5 text-rose-600" />
+                        ) : (
+                          <AlertTriangle className="w-2.5 h-2.5 text-amber-600" />
+                        )}
+                        <span>
+                          {fxStatus.isFxError
+                            ? "FX Error"
+                            : fxStatus.isFxPending
+                              ? "Pending FX"
+                              : "Stale FX"}
+                        </span>
+                      </button>
                     )}
                     {isOpen && isYahoo && ageInfo.isDaysOld && linkedSecurity && onSyncSecurityQuote && (
                       <button
@@ -682,6 +778,15 @@ export function TradeTable({
                 P&amp;L € {renderSortIcon("gainLossEur")}
               </th>
 
+              {/* 7b. FX Impact */}
+              <th
+                onClick={() => handleSort("fxImpactEur")}
+                className="py-3.5 px-3 text-right cursor-pointer hover:text-slate-900 whitespace-nowrap"
+                title="Currency impact on EUR return: Latest Value × (Current/Exit FX − Entry FX)"
+              >
+                FX Impact {renderSortIcon("fxImpactEur")}
+              </th>
+
               {/* 8. 2R Target (sorted by % left) */}
               <th
                 onClick={() => handleSort("percentLeftBeforeMove")}
@@ -703,7 +808,7 @@ export function TradeTable({
             {sortedTrades.length === 0 ? (
               <tr>
                 <td
-                  colSpan={12}
+                  colSpan={13}
                   className="py-12 text-center text-slate-400 text-sm"
                 >
                   No trades match the current filters.
@@ -757,6 +862,7 @@ export function TradeTable({
                   trade.percentLeftBeforeMove <= 0.03;
                 const needsStopAction =
                   isOpen && !trade.stopMoved && hasReached2R;
+                const fxStatus = getTradeFxStatus(trade, forexPairMap);
 
                 return (
                   <tr
@@ -1075,12 +1181,10 @@ export function TradeTable({
                       title={
                         trade.currency === "EUR"
                           ? "EUR Base Currency (FX = 1.0000)"
-                          : `Entry (${trade.startDate}): ${formatEurValue(
-                            trade.entryValueEur
-                          )} @ FX ${trade.entryRateToEur.toFixed(4)}\n${isOpen ? "Latest (Live)" : `Exit (${trade.endDate})`
-                          }: ${formatEurValue(
-                            trade.latestValueEur
-                          )} @ FX ${trade.rateToEur.toFixed(4)}`
+                          : `Local P&L: ${formatSignedLocalPrice(
+                            trade.gainLossLocal,
+                            trade.currency
+                          )}\nEUR P&L: ${formatEurValue(trade.gainLossEur, true)}`
                       }
                     >
                       <div
@@ -1093,14 +1197,119 @@ export function TradeTable({
                       >
                         {formatEurValue(trade.gainLossEur, true)}
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
+                      <div className="text-[10px] text-slate-400 mt-0.5 tabular-nums">
                         {trade.currency === "EUR"
-                          ? "FX: 1.0000"
-                          : Math.abs(trade.entryRateToEur - trade.rateToEur) >=
-                            0.00005
-                            ? `FX: ${trade.entryRateToEur.toFixed(4)} → ${trade.rateToEur.toFixed(4)}`
-                            : `FX: ${trade.rateToEur.toFixed(4)}`}
+                          ? "EUR"
+                          : formatSignedLocalPrice(trade.gainLossLocal, trade.currency)}
                       </div>
+                    </td>
+
+                    {/* 7b. FX Impact */}
+                    <td
+                      className="py-3 px-3 text-right whitespace-nowrap"
+                      title={
+                        trade.currency === "EUR"
+                          ? "EUR Base Currency (No FX exposure)"
+                          : `Entry (${trade.startDate}): ${formatEurValue(
+                            trade.entryValueEur
+                          )} @ ${trade.entryRateToEur.toFixed(4)}\n${isOpen ? "Latest (Live)" : `Exit (${trade.endDate})`
+                          }: ${formatEurValue(
+                            trade.latestValueEur
+                          )} @ ${trade.rateToEur.toFixed(4)}\nFX Impact: ${formatEurValue(
+                            trade.fxImpactEur,
+                            true
+                          )} (${trade.fxImpactPercent >= 0 ? "+" : ""}${(
+                            trade.fxImpactPercent * 100
+                          ).toFixed(2)}%)${
+                            isOpen && fxStatus.fxPair?.lastUpdated
+                              ? `\nFX updated: ${fxStatus.fxAge.fullDate}`
+                              : isOpen && fxStatus.isFxPending
+                                ? "\nFX rate is default/pending sync"
+                                : ""
+                          }`
+                      }
+                    >
+                      {trade.currency === "EUR" ? (
+                        <div className="flex flex-col items-end">
+                          <span className="text-slate-400 font-medium">—</span>
+                          <span className="text-[10px] text-slate-400 mt-0.5">
+                            Base EUR
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-end">
+                          <div className="inline-flex items-center justify-end gap-1">
+                            <span
+                              className={`font-semibold tabular-nums ${
+                                trade.fxImpactEur > 0.005
+                                  ? "text-emerald-600"
+                                  : trade.fxImpactEur < -0.005
+                                    ? "text-rose-500"
+                                    : "text-slate-500"
+                              }`}
+                            >
+                              {formatEurValue(trade.fxImpactEur, true)}
+                            </span>
+                            {Math.abs(trade.fxImpactPercent) >= 0.0005 && (
+                              <span
+                                className={`px-1 py-0.2 rounded text-[10px] font-semibold tabular-nums ${
+                                  trade.fxImpactPercent > 0
+                                    ? "bg-emerald-50 text-emerald-600"
+                                    : "bg-rose-50 text-rose-500"
+                                }`}
+                              >
+                                {trade.fxImpactPercent >= 0 ? "+" : ""}
+                                {(trade.fxImpactPercent * 100).toFixed(1)}%
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-end text-[10px] mt-0.5">
+                            {fxStatus.needsFxSync && onOpenBulkFxSync ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenBulkFxSync();
+                                }}
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded border font-semibold cursor-pointer transition-colors ${
+                                  fxStatus.isFxError
+                                    ? "bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100"
+                                    : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+                                }`}
+                                title={
+                                  fxStatus.isFxError
+                                    ? `${fxStatus.fxPair?.syncError || "FX sync error"} — click to update all FX rates`
+                                    : fxStatus.isFxPending
+                                      ? "Default FX rate pending sync — click to update all FX rates"
+                                      : `FX updated ${fxStatus.fxAge.label} — click to update all FX rates`
+                                }
+                              >
+                                {fxStatus.isFxError ? (
+                                  <AlertCircle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
+                                ) : (
+                                  <AlertTriangle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                )}
+                                <span suppressHydrationWarning>
+                                  {fxStatus.isFxError
+                                    ? "FX Error"
+                                    : fxStatus.isFxPending
+                                      ? "Pending FX"
+                                      : "Stale FX"}
+                                </span>
+                                <RefreshCw className="w-2.5 h-2.5 opacity-80 shrink-0" />
+                              </button>
+                            ) : (
+                              <span className="text-slate-400 tabular-nums">
+                                {Math.abs(trade.entryRateToEur - trade.rateToEur) >=
+                                0.00005
+                                  ? `${trade.entryRateToEur.toFixed(4)} → ${trade.rateToEur.toFixed(4)}`
+                                  : trade.rateToEur.toFixed(4)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </td>
 
                     {/* 8. 2R Target */}
